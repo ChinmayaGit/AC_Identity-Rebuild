@@ -41,6 +41,7 @@ internal static class Program
         _saveDir = Path.Combine(root, "offline", "save");
         int port = 8080;
         bool selfTest = false;
+        string exportDir = null;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--cache" && i + 1 < args.Length) _cacheDir = args[++i];
@@ -48,6 +49,7 @@ internal static class Program
             else if (args[i] == "--port" && i + 1 < args.Length) port = int.Parse(args[++i]);
             else if (args[i] == "--host" && i + 1 < args.Length) Host = args[++i];
             else if (args[i] == "--self-test") selfTest = true;
+            else if (args[i] == "--export-companion" && i + 1 < args.Length) exportDir = args[++i];
         }
         CdnUrl = "http://" + Host + ":" + port + "/cdn/ACID_2.8.2_373";
         ApiUrl = "http://" + Host + ":" + port + "/acier/v1/api";
@@ -58,6 +60,13 @@ internal static class Program
         LoadOrCreateProfile();
         RepairProfile();
         Statics();
+
+        if (!string.IsNullOrEmpty(exportDir))
+        {
+            ExportCompanion(exportDir);
+            Console.WriteLine("Companion export completed to: " + exportDir);
+            return 0;
+        }
 
         if (selfTest)
         {
@@ -590,7 +599,7 @@ internal static class Program
         Console.WriteLine("avatar classes " + classes.Length);
     }
 
-    private static object CreateMissionGoals(int targetCount, int descriptionNeutral = 3430)
+    private static object CreateMissionGoals(int targetCount, int descriptionNeutral = 3430, string objectiveType = "Kill")
     {
         object goals = New("AcierProtocol.MissionGoals");
         Type goalType = Nested("MissionGoals", "MissionGoal");
@@ -598,9 +607,9 @@ internal static class Program
         Set(goal, "goalType", Enum.Parse(TypeOf("AcierProtocol.EMissionGoal"), "Objective_EMissionGoal"));
         Set(goal, "objectiveId", 3L);
         Set(goal, "id", 1);
-        Set(goal, "type", Enum.Parse(TypeOf("AcierProtocol.EObjective"), "Kill"));
+        Set(goal, "type", Enum.Parse(TypeOf("AcierProtocol.EObjective"), objectiveType));
         object description = New("AcierProtocol.LangKey");
-        Set(description, "neutral", descriptionNeutral); // ASSASSINATE your Target - {Current} / {Count}
+        Set(description, "neutral", descriptionNeutral); // Loca description
         Set(goal, "description", description);
 
         Type entryType = Nested("MissionGoal", "MappingEntry");
@@ -665,8 +674,38 @@ internal static class Program
         return node;
     }
 
-    private static object CreateObjectiveKillComponent(long objId, long[] targetSpawnIds)
+    private static object CreateObjectiveInteractionComponent(long objId, long[] targetSpawnIds, int descriptionLocaId)
     {
+        Type componentType = TypeOf("AcierProtocol.SerializedNodeComponent");
+        object comp = Activator.CreateInstance(componentType);
+        Set(comp, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_ObjectiveInteractionContent"));
+
+        object interactionContent = New("AcierProtocol.ObjectiveInteractionContent");
+        object targetContent = New("AcierProtocol.ObjectiveTargetContent");
+        object objBase = New("AcierProtocol.ObjectiveBaseContent");
+        object objMissionBase = ActiveBase(objId);
+        Set(objMissionBase, "MapIcon", Enum.Parse(TypeOf("AcierProtocol.EMapIconType"), "Doctor_EMapIconType"));
+        Set(objBase, "MissionBaseContent", objMissionBase);
+        Set(objBase, "IsPrimaryObjective", true);
+        Set(objBase, "HideDescription", false);
+        Set(objBase, "Description", descriptionLocaId.ToString());
+        Set(objBase, "ShortDescription", descriptionLocaId.ToString());
+        Set(objBase, "OnSuccessId", -2L);
+        Set(objBase, "OnFailId", -2L);
+        Set(objBase, "IsVisibleInEagleVision", true);
+        Set(objBase, "TrackerIcon", Enum.Parse(TypeOf("AcierProtocol.EObjectiveType"), "Tutorial_EObjectiveType"));
+
+        Set(targetContent, "ObjectiveBaseContent", objBase);
+        Set(targetContent, "Targets", targetSpawnIds);
+
+        Set(interactionContent, "ObjectiveTargetContent", targetContent);
+        Set(comp, "ObjectiveInteractionContent", interactionContent);
+        return comp;
+    }
+
+    private static object CreateObjectiveKillComponent(long objId, long[] targetSpawnIds, int descriptionLocaId = 3430, int targetCount = -1)
+    {
+        if (targetCount <= 0) targetCount = targetSpawnIds.Length;
         Type componentType = TypeOf("AcierProtocol.SerializedNodeComponent");
         object comp = Activator.CreateInstance(componentType);
         Set(comp, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_ObjectiveKillContent"));
@@ -679,8 +718,8 @@ internal static class Program
         Set(objBase, "MissionBaseContent", objMissionBase);
         Set(objBase, "IsPrimaryObjective", true);
         Set(objBase, "HideDescription", false);
-        Set(objBase, "Description", "3430");
-        Set(objBase, "ShortDescription", "3430");
+        Set(objBase, "Description", descriptionLocaId.ToString());
+        Set(objBase, "ShortDescription", descriptionLocaId.ToString());
         Set(objBase, "OnSuccessId", -2L);
         Set(objBase, "OnFailId", -2L);
         Set(objBase, "IsVisibleInEagleVision", true);
@@ -690,7 +729,7 @@ internal static class Program
         Set(targetContent, "Targets", targetSpawnIds);
 
         Set(killContent, "ObjectiveTargetContent", targetContent);
-        Set(killContent, "Minimum", targetSpawnIds.Length);
+        Set(killContent, "Minimum", targetCount);
         Set(killContent, "DoNotKill", false);
 
         Set(comp, "ObjectiveKillContent", killContent);
@@ -709,8 +748,12 @@ internal static class Program
         float playerZ,
         float playerRot,
         long[] targetIds,
-        (string name, long id, string guid, float x, float y, float z, float rot, bool isEnemy)[] npcs)
+        (string name, long id, string guid, float x, float y, float z, float rot, bool isEnemy)[] npcs,
+        int descriptionLocaId = 3430,
+        string objectiveKind = "Kill",
+        int targetCount = -1)
     {
+        if (targetCount <= 0) targetCount = targetIds.Length;
         object file = New("AcierProtocol.MissionFile");
         object root = New("AcierProtocol.SerializedNode");
         Set(root, "Name", missionId);
@@ -739,7 +782,9 @@ internal static class Program
         Set(hotspotContent, "MissionBaseContent", hotspotBase);
         Set(hotspots, "MissionHotspotsContent", hotspotContent);
 
-        object killObjective = CreateObjectiveKillComponent(3L, targetIds);
+        object mainObjective = objectiveKind == "Interaction"
+            ? CreateObjectiveInteractionComponent(3L, targetIds, descriptionLocaId)
+            : CreateObjectiveKillComponent(3L, targetIds, descriptionLocaId, targetCount);
 
         // Backup timer objective (hidden, non-primary, optional so it does not block completion)
         object stay = Activator.CreateInstance(componentType);
@@ -762,7 +807,9 @@ internal static class Program
         Array components = Array.CreateInstance(componentType, 4);
         components.SetValue(component, 0);
         components.SetValue(hotspots, 1);
-        components.SetValue(killObjective, 2);
+        components.SetValue(mainObjective, 2);
+        components.SetValue(stay, 3);
+        Set(root, "Components", components);
         components.SetValue(stay, 3);
         Set(root, "Components", components);
 
@@ -810,24 +857,118 @@ internal static class Program
 
         float playerX = -2.0f, playerY = 8.6f, playerZ = -40.0f, playerRot = 0f;
         int targetCount = 3;
-        long[] targetIds = new long[] { 101L, 102L, 103L };
+        int objectiveNeutral = 3430;
+        string objectiveKind = "Kill";
+        string goalType = "Kill";
+        long[] targetIds = new long[] { 101L };
 
         (string name, long id, string guid, float x, float y, float z, float rot, bool isEnemy)[] npcs;
 
-        // Tutorial Missions (Montreal - Animus VR Training in Monteriggioni)
-        if (lower.Contains("tutorial") || lower.Contains("animus"))
+        // Tutorial 01: Interaction - Approach the Doctor
+        if (lower.Contains("tutorial_01") || (lower.Contains("tutorial") && lower.Contains("interaction")))
         {
             region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
-            playerX = 0.0f; playerY = 1.0f; playerZ = -10.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            playerX = 0.0f; playerY = 0.5f; playerZ = -8.0f; playerRot = 0f;
+            targetCount = 1;
+            objectiveNeutral = 6910; // Approach the Doctor
+            objectiveKind = "Interaction";
+            goalType = "NpcInteraction";
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("VR_Training_Target_01", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 4.0f, 180f, true),
-                ("VR_Training_Target_02", 102L, "ntt_0c585da4", -4.0f, 0.5f, 8.0f, 180f, true),
-                ("VR_Training_Target_03", 103L, "ntt_0c585da4", 4.0f, 0.5f, 8.0f, 180f, true),
-                ("VR_Training_Instructor_01", 104L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -6.0f, 0.5f, -2.0f, 90f, false),
-                ("VR_Training_Civilian_01", 105L, "ntt_44fd8a65", 6.0f, 0.5f, -2.0f, -90f, false)
+                ("Doctor_Interact", 101L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 0.0f, 0.5f, 4.0f, 180f, false),
+                ("Town_Civilian_01", 102L, "ntt_44fd8a65", -4.0f, 0.5f, -2.0f, 90f, false),
+                ("Town_Civilian_02", 103L, "ntt_2cccad34", 4.0f, 0.5f, -2.0f, -90f, false)
+            };
+        }
+        // Tutorial 02: Free Running
+        else if (lower.Contains("tutorial_02") || (lower.Contains("tutorial") && lower.Contains("running")))
+        {
+            region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
+            playerX = -12.0f; playerY = 8.5f; playerZ = -12.0f; playerRot = 0f;
+            targetCount = 1;
+            objectiveNeutral = 6916; // Tutorial: Free Running
+            targetIds = new long[] { 101L };
+            npcs = new (string, long, string, float, float, float, float, bool)[]
+            {
+                ("VR_Rooftop_Target", 101L, "ntt_bd49bc5f", -12.0f, 8.5f, 12.0f, 180f, true),
+                ("VR_Street_Civilian", 102L, "ntt_44fd8a65", 0.0f, 0.5f, 0.0f, 0f, false)
+            };
+        }
+        // Tutorial 03: Combat
+        else if (lower.Contains("tutorial_03") || (lower.Contains("tutorial") && lower.Contains("combat")))
+        {
+            region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
+            playerX = 0.0f; playerY = 0.5f; playerZ = -6.0f; playerRot = 0f;
+            targetCount = 1;
+            objectiveNeutral = 6917; // Tutorial: Combat
+            targetIds = new long[] { 101L };
+            npcs = new (string, long, string, float, float, float, float, bool)[]
+            {
+                ("VR_Sparring_Partner", 101L, "ntt_0c585da4", 0.0f, 0.5f, 4.0f, 180f, true),
+                ("VR_Combat_Instructor", 102L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -5.0f, 0.5f, -1.0f, 90f, false)
+            };
+        }
+        // Tutorial 04: Skills
+        else if (lower.Contains("tutorial_04") || (lower.Contains("tutorial") && lower.Contains("skills")))
+        {
+            region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
+            playerX = 0.0f; playerY = 0.5f; playerZ = -6.0f; playerRot = 0f;
+            targetCount = 1;
+            objectiveNeutral = 6918; // Tutorial: Skills
+            targetIds = new long[] { 101L };
+            npcs = new (string, long, string, float, float, float, float, bool)[]
+            {
+                ("VR_Skill_Brute", 101L, "ntt_6d68817b", 0.0f, 0.5f, 5.0f, 180f, true),
+                ("VR_Skill_Instructor", 102L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -5.0f, 0.5f, -1.0f, 90f, false)
+            };
+        }
+        // Tutorial 05: Eagle Vision
+        else if (lower.Contains("tutorial_05") || (lower.Contains("tutorial") && lower.Contains("eagle")))
+        {
+            region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
+            playerX = 0.0f; playerY = 0.5f; playerZ = -12.0f; playerRot = 0f;
+            targetCount = 1;
+            objectiveNeutral = 6694; // Tutorial: Eagle Vision
+            targetIds = new long[] { 101L };
+            npcs = new (string, long, string, float, float, float, float, bool)[]
+            {
+                ("VR_Undercover_Spy", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 6.0f, 180f, true),
+                ("Crowd_01", 102L, "ntt_44fd8a65", -2.0f, 0.5f, 6.0f, 45f, false),
+                ("Crowd_02", 103L, "ntt_2cccad34", 2.0f, 0.5f, 5.0f, -45f, false),
+                ("Crowd_03", 104L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -1.0f, 0.5f, 8.0f, 135f, false),
+                ("Crowd_04", 105L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 1.0f, 0.5f, 8.0f, -135f, false)
+            };
+        }
+        // Tutorial 06: Assassinations (Air Assassination from Rooftop Ledge)
+        else if (lower.Contains("tutorial_06") || (lower.Contains("tutorial") && lower.Contains("assassination")))
+        {
+            region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
+            // Player perched on roof ledge looking down
+            playerX = -3.5f; playerY = 8.6f; playerZ = -18.0f; playerRot = 0f;
+            targetCount = 1;
+            objectiveNeutral = 6696; // Tutorial: Assassinations
+            targetIds = new long[] { 101L };
+            // Target directly 4m below ledge facing away (rot 0f) for Air Assassination
+            npcs = new (string, long, string, float, float, float, float, bool)[]
+            {
+                ("VR_Ledge_Target", 101L, "ntt_0c585da4", -3.5f, 0.5f, -14.0f, 0f, true),
+                ("VR_Street_Civilian", 102L, "ntt_44fd8a65", 1.0f, 0.5f, -14.0f, 0f, false)
+            };
+        }
+        // Tutorial 07: Stealth Assassinations
+        else if (lower.Contains("tutorial_07") || (lower.Contains("tutorial") && lower.Contains("stealth")))
+        {
+            region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
+            playerX = -6.0f; playerY = 0.5f; playerZ = -10.0f; playerRot = 0f;
+            targetCount = 1;
+            objectiveNeutral = 6695; // Tutorial: Stealth Assassinations
+            targetIds = new long[] { 101L };
+            // Guard patrolling with back turned towards player
+            npcs = new (string, long, string, float, float, float, float, bool)[]
+            {
+                ("VR_Patrol_Guard", 101L, "ntt_0c585da4", -6.0f, 0.5f, 0.0f, 0f, true),
+                ("VR_Street_Civilian", 102L, "ntt_44fd8a65", 2.0f, 0.5f, -5.0f, 90f, false)
             };
         }
         // Campaign 1: A Murder of Crows (10 Story Missions)
@@ -837,34 +978,36 @@ internal static class Program
             region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
             playerX = 0.0f; playerY = 1.0f; playerZ = -10.0f; playerRot = 0f;
             targetCount = 3;
+            objectiveNeutral = 2066; // Find and Kill the Mercenaries.
             targetIds = new long[] { 101L, 102L, 103L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Corrupted_Commander", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 6.0f, 180f, true),
-                ("Corrupted_Militia_01", 102L, "ntt_0c585da4", -3.0f, 0.5f, 10.0f, 180f, true),
-                ("Corrupted_Militia_02", 103L, "ntt_0c585da4", 3.0f, 0.5f, 10.0f, 180f, true),
+                ("Tax_Collector_Mercenary_01", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 6.0f, 180f, true),
+                ("Tax_Collector_Mercenary_02", 102L, "ntt_0c585da4", -3.0f, 0.5f, 10.0f, 180f, true),
+                ("Tax_Collector_Mercenary_03", 103L, "ntt_0c585da4", 3.0f, 0.5f, 10.0f, 180f, true),
                 ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 2.0f, 8.0f, 14.0f, 180f, true),
                 ("Enemy_Brute_01", 105L, "ntt_6d68817b", -2.0f, 0.5f, 16.0f, 180f, true),
-                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -5.0f, 0.5f, 0.0f, 90f, false),
-                ("Special_Courtesan_01", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 5.0f, 0.5f, 0.0f, -90f, false),
-                ("Civilian_Male_01", 108L, "ntt_44fd8a65", -4.0f, 0.5f, -5.0f, 90f, false),
-                ("Civilian_Female_01", 109L, "ntt_2cccad34", 4.0f, 0.5f, -5.0f, -90f, false)
+                ("Monteriggioni_Citizen_Doctor", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -5.0f, 0.5f, 0.0f, 90f, false),
+                ("Monteriggioni_Citizen_Courtesan", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 5.0f, 0.5f, 0.0f, -90f, false),
+                ("Monteriggioni_Citizen_Male", 108L, "ntt_44fd8a65", -4.0f, 0.5f, -5.0f, 90f, false),
+                ("Monteriggioni_Citizen_Female", 109L, "ntt_2cccad34", 4.0f, 0.5f, -5.0f, -90f, false)
             };
         }
         else if (lower == "story_crows_02" || lower.Contains("healer") || lower.Contains("monteriggioni_02"))
         {
-            // Mission 2: A Healer's Blood (Monteriggioni - Nighttime)
+            // Mission 2: A Healer's Blood (Monteriggioni - Nighttime) - Pietro de Galencia
             region = "Monteriggioni"; mood = "Nighttime"; scene = "MonteRiggioni_NightTime"; locationName = "Monteriggioni";
             playerX = 8.0f; playerY = 1.0f; playerZ = -6.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 1;
+            objectiveNeutral = 2067; // Find Pietro de Galencia and kill him.
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Traitor_Physician", 101L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 8.0f, 0.5f, 10.0f, 180f, true),
-                ("Physician_Escort_01", 102L, "ntt_0c585da4", 5.0f, 0.5f, 12.0f, 180f, true),
-                ("Physician_Escort_02", 103L, "ntt_0c585da4", 11.0f, 0.5f, 12.0f, 180f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 7.0f, 8.0f, 15.0f, 180f, true),
-                ("Enemy_Brute_01", 105L, "ntt_6d68817b", 8.0f, 0.5f, 18.0f, 180f, true),
+                ("Pietro_de_Galencia", 101L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 8.0f, 0.5f, 10.0f, 180f, true),
+                ("Pietro_Bodyguard_01", 102L, "ntt_0c585da4", 5.0f, 0.5f, 12.0f, 180f, true),
+                ("Pietro_Bodyguard_02", 103L, "ntt_0c585da4", 11.0f, 0.5f, 12.0f, 180f, true),
+                ("Borgia_Crossbow_01", 104L, "ntt_ed443896", 7.0f, 8.0f, 15.0f, 180f, true),
+                ("Borgia_Brute_01", 105L, "ntt_6d68817b", 8.0f, 0.5f, 18.0f, 180f, true),
                 ("Special_Courtesan_01", 106L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 2.0f, 0.5f, 0.0f, -90f, false),
                 ("Civilian_Male_01", 107L, "ntt_44fd8a65", 4.0f, 0.5f, -2.0f, 90f, false),
                 ("Civilian_Female_01", 108L, "ntt_2cccad34", 12.0f, 0.5f, -2.0f, -90f, false)
@@ -872,22 +1015,21 @@ internal static class Program
         }
         else if (lower == "story_crows_03" || lower.Contains("vengeful") || lower.Contains("palazzo_01"))
         {
-            // Mission 3: Vengeful Eyes (Firenze Palazzo - Daytime)
+            // Mission 3: Vengeful Eyes (Firenze Palazzo - Daytime) - Defending Leonardo da Vinci
             region = "Firenze_Palazzo"; mood = "Daytime"; scene = "Firenze_palazzo_daytime"; locationName = "Firenze";
             playerX = -90.0f; playerY = 1.0f; playerZ = 10.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 2;
+            objectiveNeutral = 2068; // Protect Leonardo and Escort him to safety.
+            targetIds = new long[] { 101L, 102L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Borgia_Watcher_Lead", 101L, "ntt_bd49bc5f", -90.0f, 1.0f, 25.0f, 180f, true),
+                ("Borgia_Watcher_Leader", 101L, "ntt_bd49bc5f", -90.0f, 1.0f, 25.0f, 180f, true),
                 ("Borgia_Watcher_Left", 102L, "ntt_ed443896", -86.0f, 1.0f, 30.0f, 180f, true),
-                ("Borgia_Watcher_Right", 103L, "ntt_0c585da4", -94.0f, 1.0f, 30.0f, 180f, true),
-                ("Enemy_Brute_01", 104L, "ntt_6d68817b", -85.0f, 1.0f, 20.0f, 180f, true),
-                ("Enemy_Militia_01", 105L, "ntt_0c585da4", -95.0f, 1.0f, 22.0f, 180f, true),
-                ("Special_Courtesan_01", 106L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -85.0f, 1.0f, 18.0f, -90f, false),
-                ("Special_Doctor_01", 107L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -95.0f, 1.0f, 18.0f, 90f, false),
-                ("Civilian_Male_01", 108L, "ntt_44fd8a65", -94.0f, 1.0f, 15.0f, 90f, false),
-                ("Civilian_Female_01", 109L, "ntt_2cccad34", -86.0f, 1.0f, 15.0f, -90f, false)
+                ("Leonardo_da_Vinci", 106L, "ntt_44fd8a65", -88.0f, 1.0f, 14.0f, 90f, false),
+                ("Enemy_Militia_01", 104L, "ntt_0c585da4", -94.0f, 1.0f, 30.0f, 180f, true),
+                ("Enemy_Brute_01", 105L, "ntt_6d68817b", -85.0f, 1.0f, 20.0f, 180f, true),
+                ("Special_Courtesan_01", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -85.0f, 1.0f, 12.0f, -90f, false),
+                ("Special_Doctor_01", 108L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -95.0f, 1.0f, 12.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_04" || lower.Contains("requiem") || lower.Contains("coloseum_01"))
@@ -895,37 +1037,34 @@ internal static class Program
             // Mission 4: An Assassin's Requiem (Roma Colosseum - Afternoon)
             region = "Roma_Coloseum"; mood = "Afternoon"; scene = "Roma_Coloseum_Afternoon"; locationName = "Roma";
             playerX = 0.0f; playerY = 1.0f; playerZ = -15.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 2;
+            objectiveNeutral = 3332; // Recover the contents of the chest and kill the Borgia Agents, then flee the area.
+            targetIds = new long[] { 101L, 102L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Desecrator_Commander", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 2.0f, 180f, true),
-                ("Desecrator_Brute", 102L, "ntt_6d68817b", -4.0f, 0.5f, 6.0f, 180f, true),
-                ("Desecrator_Militia", 103L, "ntt_0c585da4", 4.0f, 0.5f, 6.0f, 180f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 2.0f, 1.0f, 10.0f, 180f, true),
-                ("Special_Doctor_01", 105L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 6.0f, 1.0f, -5.0f, 90f, false),
-                ("Special_Courtesan_01", 106L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -6.0f, 1.0f, -5.0f, -90f, false),
-                ("Civilian_Male_01", 107L, "ntt_44fd8a65", -5.0f, 1.0f, -10.0f, 90f, false),
-                ("Civilian_Female_01", 108L, "ntt_2cccad34", 5.0f, 1.0f, -10.0f, -90f, false)
+                ("Borgia_Desecrator_Leader", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 2.0f, 180f, true),
+                ("Borgia_Catacomb_Agent_01", 102L, "ntt_6d68817b", -4.0f, 0.5f, 6.0f, 180f, true),
+                ("Borgia_Catacomb_Agent_02", 103L, "ntt_0c585da4", 4.0f, 0.5f, 6.0f, 180f, true),
+                ("Catacomb_Scout", 105L, "ntt_44fd8a65", -5.0f, 1.0f, -10.0f, 90f, false),
+                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 6.0f, 1.0f, -5.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_05" || lower.Contains("broken_chains") || lower.Contains("chains") || lower.Contains("santacroce"))
         {
-            // Mission 5: Broken Chains (Firenze Santa Croce - Sunny)
+            // Mission 5: Broken Chains (Firenze Santa Croce - Sunny) - Rescuing Demetrio
             region = "Firenze_SantaCroce"; mood = "Sunny"; scene = "Firenze_santacroce_sunny"; locationName = "Firenze";
             playerX = 0.0f; playerY = 1.0f; playerZ = -10.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 2;
+            objectiveNeutral = 3333; // Rescue Demetrio and Escort him to safety.
+            targetIds = new long[] { 101L, 102L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
                 ("Slave_Driver_Captain", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 10.0f, 180f, true),
                 ("Slave_Driver_Brute", 102L, "ntt_6d68817b", -5.0f, 0.5f, 14.0f, 180f, true),
-                ("Slave_Driver_Militia", 103L, "ntt_0c585da4", 5.0f, 0.5f, 14.0f, 180f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 0.0f, 1.0f, 20.0f, 180f, true),
+                ("Slave_Driver_Guard", 103L, "ntt_0c585da4", 5.0f, 0.5f, 14.0f, 180f, true),
+                ("Demetrio_The_Inventor", 106L, "ntt_44fd8a65", -4.0f, 0.5f, -4.0f, 90f, false),
                 ("Special_Courtesan_01", 105L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -6.0f, 0.5f, 2.0f, -90f, false),
-                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 6.0f, 0.5f, 2.0f, 90f, false),
-                ("Civilian_Male_01", 107L, "ntt_44fd8a65", -4.0f, 0.5f, -4.0f, 90f, false),
-                ("Civilian_Female_01", 108L, "ntt_2cccad34", 4.0f, 0.5f, -4.0f, -90f, false)
+                ("Special_Doctor_01", 107L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 6.0f, 0.5f, 2.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_06" || lower.Contains("storm_of_crows") || lower.Contains("storm"))
@@ -933,35 +1072,33 @@ internal static class Program
             // Mission 6: A Storm of Crows (Roma Colosseum - Foggy)
             region = "Roma_Coloseum"; mood = "Foggy"; scene = "Roma_Coloseum_Foggy"; locationName = "Roma";
             playerX = 10.0f; playerY = 1.0f; playerZ = -10.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 1;
+            objectiveNeutral = 4423; // Investigate the Borgia Camp.
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Crow_Assassin_01", 101L, "ntt_bd49bc5f", 10.0f, 0.5f, 8.0f, 180f, true),
-                ("Crow_Assassin_02", 102L, "ntt_bd49bc5f", 6.0f, 0.5f, 14.0f, 180f, true),
-                ("Crow_Assassin_03", 103L, "ntt_bd49bc5f", 14.0f, 0.5f, 14.0f, 180f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 10.0f, 1.0f, 18.0f, 180f, true),
-                ("Enemy_Brute_01", 105L, "ntt_6d68817b", 2.0f, 0.5f, 12.0f, 180f, true),
-                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 4.0f, 0.5f, -2.0f, 90f, false),
-                ("Civilian_Male_01", 107L, "ntt_44fd8a65", 8.0f, 0.5f, -5.0f, 90f, false)
+                ("Captain_Matteo", 101L, "ntt_bd49bc5f", 10.0f, 0.5f, 8.0f, 180f, true),
+                ("Crow_Infiltrator_01", 102L, "ntt_bd49bc5f", 6.0f, 0.5f, 14.0f, 180f, true),
+                ("Crow_Infiltrator_02", 103L, "ntt_bd49bc5f", 14.0f, 0.5f, 14.0f, 180f, true),
+                ("Sirus_Favero", 106L, "ntt_44fd8a65", 8.0f, 0.5f, -5.0f, 90f, false),
+                ("Special_Doctor_01", 107L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 4.0f, 0.5f, -2.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_07" || lower.Contains("burning_pages") || lower.Contains("burning"))
         {
-            // Mission 7: Burning Pages (Firenze Palazzo - Daytime)
+            // Mission 7: Burning Pages (Firenze Palazzo - Daytime) - The Bookkeeper
             region = "Firenze_Palazzo"; mood = "Daytime"; scene = "Firenze_palazzo_daytime"; locationName = "Firenze";
             playerX = -85.0f; playerY = 1.0f; playerZ = 15.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 1;
+            objectiveNeutral = 2086; // Scout the area in order to identify the Bookkeeper.
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Arsonist_Leader", 101L, "ntt_bd49bc5f", -85.0f, 1.0f, 32.0f, 180f, true),
-                ("Arsonist_Left", 102L, "ntt_0c585da4", -80.0f, 1.0f, 38.0f, 180f, true),
-                ("Arsonist_Right", 103L, "ntt_0c585da4", -90.0f, 1.0f, 38.0f, 180f, true),
-                ("Enemy_Brute_01", 104L, "ntt_6d68817b", -82.0f, 1.0f, 26.0f, 180f, true),
-                ("Special_Courtesan_01", 105L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -78.0f, 1.0f, 20.0f, -90f, false),
+                ("The_Bookkeeper", 101L, "ntt_bd49bc5f", -85.0f, 1.0f, 32.0f, 180f, true),
+                ("Arsonist_Guard_01", 102L, "ntt_0c585da4", -80.0f, 1.0f, 38.0f, 180f, true),
+                ("Arsonist_Guard_02", 103L, "ntt_0c585da4", -90.0f, 1.0f, 38.0f, 180f, true),
                 ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -92.0f, 1.0f, 20.0f, 90f, false),
-                ("Civilian_Male_01", 107L, "ntt_44fd8a65", -88.0f, 1.0f, 18.0f, 90f, false)
+                ("Library_Scholar_01", 107L, "ntt_44fd8a65", -88.0f, 1.0f, 18.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_08" || lower.Contains("red_sun") || lower.Contains("redsun"))
@@ -969,17 +1106,16 @@ internal static class Program
             // Mission 8: Under the Red Sun (Monteriggioni - Daytime)
             region = "Monteriggioni"; mood = "Daytime"; scene = "MonteRiggioni_DayTime"; locationName = "Monteriggioni";
             playerX = -5.0f; playerY = 1.0f; playerZ = -15.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 2;
+            objectiveNeutral = 4497; // Help Sirus locate the hideout of the Crows.
+            targetIds = new long[] { 101L, 102L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Garrison_Lieutenant_01", 101L, "ntt_bd49bc5f", -5.0f, 0.5f, 4.0f, 180f, true),
-                ("Garrison_Lieutenant_02", 102L, "ntt_6d68817b", -10.0f, 0.5f, 8.0f, 180f, true),
-                ("Garrison_Lieutenant_03", 103L, "ntt_0c585da4", 0.0f, 0.5f, 8.0f, 180f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", -3.0f, 8.0f, 12.0f, 180f, true),
-                ("Special_Doctor_01", 105L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -12.0f, 0.5f, -8.0f, 90f, false),
-                ("Special_Courtesan_01", 106L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 2.0f, 0.5f, -8.0f, -90f, false),
-                ("Civilian_Male_01", 107L, "ntt_44fd8a65", -8.0f, 0.5f, -12.0f, 90f, false)
+                ("Ambushing_Crow_Leader", 101L, "ntt_bd49bc5f", -5.0f, 0.5f, 4.0f, 180f, true),
+                ("Ambushing_Crow_Left", 102L, "ntt_6d68817b", -10.0f, 0.5f, 8.0f, 180f, true),
+                ("Ambushing_Crow_Right", 103L, "ntt_0c585da4", 0.0f, 0.5f, 8.0f, 180f, true),
+                ("Sirus_Favero", 106L, "ntt_44fd8a65", -8.0f, 0.5f, -12.0f, 90f, false),
+                ("Special_Doctor_01", 105L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -12.0f, 0.5f, -8.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_09" || lower.Contains("dangerous_trade") || lower.Contains("trade"))
@@ -987,37 +1123,32 @@ internal static class Program
             // Mission 9: A Dangerous Trade (Firenze Palazzo - Nighttime)
             region = "Firenze_Palazzo"; mood = "Nighttime"; scene = "Firenze_palazzo_nighttime"; locationName = "Firenze";
             playerX = -92.0f; playerY = 1.0f; playerZ = 12.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 2;
+            objectiveNeutral = 4543; // DELIVER the letter to Sirus
+            targetIds = new long[] { 101L, 102L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Arms_Dealer_Boss", 101L, "ntt_bd49bc5f", -92.0f, 1.0f, 28.0f, 180f, true),
-                ("Arms_Dealer_Guard_01", 102L, "ntt_6d68817b", -88.0f, 1.0f, 32.0f, 180f, true),
-                ("Arms_Dealer_Guard_02", 103L, "ntt_ed443896", -96.0f, 1.0f, 32.0f, 180f, true),
-                ("Enemy_Militia_01", 104L, "ntt_0c585da4", -90.0f, 1.0f, 22.0f, 180f, true),
-                ("Special_Courtesan_01", 105L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -86.0f, 1.0f, 16.0f, -90f, false),
-                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -98.0f, 1.0f, 16.0f, 90f, false),
+                ("Crow_Messenger", 101L, "ntt_bd49bc5f", -92.0f, 1.0f, 28.0f, 180f, true),
+                ("Templar_Agent_Receiver", 102L, "ntt_6d68817b", -88.0f, 1.0f, 32.0f, 180f, true),
+                ("Arms_Dealer_Guard", 103L, "ntt_ed443896", -96.0f, 1.0f, 32.0f, 180f, true),
                 ("Civilian_Male_01", 107L, "ntt_44fd8a65", -92.0f, 1.0f, 16.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_10" || lower.Contains("saviors_of_roma") || lower.Contains("saviors"))
         {
-            // Mission 10: Saviors of Roma (Roma Colosseum - Afternoon)
+            // Mission 10: Saviors of Roma (Roma Colosseum - Afternoon) - Il Corvo!
             region = "Roma_Coloseum"; mood = "Afternoon"; scene = "Roma_Coloseum_Afternoon"; locationName = "Roma";
             playerX = 0.0f; playerY = 1.0f; playerZ = -20.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 1;
+            objectiveNeutral = 4498; // Fight your way to Il Corvo and kill him.
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Borgia_High_Commander", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 5.0f, 180f, true),
-                ("Vanguard_Captain", 102L, "ntt_bd49bc5f", -6.0f, 0.5f, 10.0f, 180f, true),
-                ("Elite_Brute_Enforcer", 103L, "ntt_6d68817b", 6.0f, 0.5f, 10.0f, 180f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 0.0f, 1.0f, 15.0f, 180f, true),
-                ("Enemy_Militia_01", 105L, "ntt_0c585da4", -4.0f, 0.5f, 0.0f, 180f, true),
-                ("Enemy_Militia_02", 106L, "ntt_0c585da4", 4.0f, 0.5f, 0.0f, 180f, true),
-                ("Special_Doctor_01", 107L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 8.0f, 1.0f, -10.0f, 90f, false),
-                ("Special_Courtesan_01", 108L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -8.0f, 1.0f, -10.0f, -90f, false),
-                ("Civilian_Male_01", 109L, "ntt_44fd8a65", 0.0f, 1.0f, -15.0f, 90f, false)
+                ("Il_Corvo", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 5.0f, 180f, true),
+                ("Borgia_High_Commander", 102L, "ntt_bd49bc5f", -6.0f, 0.5f, 10.0f, 180f, true),
+                ("Elite_Crow_Enforcer", 103L, "ntt_6d68817b", 6.0f, 0.5f, 10.0f, 180f, true),
+                ("Niccolo_Machiavelli", 107L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 8.0f, 1.0f, -10.0f, 90f, false),
+                ("Special_Courtesan_01", 108L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -8.0f, 1.0f, -10.0f, -90f, false)
             };
         }
         // Campaign 2: Forli - A Crimson Sunset (4 Story Missions)
@@ -1026,19 +1157,17 @@ internal static class Program
             // Mission 2: The Nest of the Bird (Forli - Courtyard Fortress)
             region = "Forli"; mood = "Dusk"; scene = "Forli_dusk"; locationName = "Forli";
             playerX = 0.0f; playerY = -1.5f; playerZ = 55.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 1;
+            objectiveNeutral = 6514; // KILL the remaining Crows - {Current}/{Count}
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Enemy_Commander_01", 101L, "ntt_bd49bc5f", 0.0f, -1.9f, 74.0f, 180f, true),
-                ("Enemy_Crossbow_01", 102L, "ntt_ed443896", -10.0f, -1.9f, 68.0f, 90f, true),
-                ("Enemy_Crossbow_02", 103L, "ntt_ed443896", 10.0f, -1.9f, 68.0f, -90f, true),
-                ("Enemy_Brute_01", 104L, "ntt_6d68817b", 2.0f, -1.9f, 65.0f, 180f, true),
-                ("Enemy_Militia_01", 105L, "ntt_0c585da4", -2.0f, -1.9f, 65.0f, 180f, true),
+                ("Crow_Nest_Commander", 101L, "ntt_bd49bc5f", 0.0f, -1.9f, 74.0f, 180f, true),
+                ("Crow_Nest_Archer_01", 102L, "ntt_ed443896", -10.0f, -1.9f, 68.0f, 90f, true),
+                ("Crow_Nest_Archer_02", 103L, "ntt_ed443896", 10.0f, -1.9f, 68.0f, -90f, true),
+                ("Crow_Nest_Brute", 104L, "ntt_6d68817b", 2.0f, -1.9f, 65.0f, 180f, true),
                 ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -6.0f, -1.9f, 58.0f, 90f, false),
-                ("Special_Courtesan_01", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 6.0f, -1.9f, 58.0f, -90f, false),
-                ("Civilian_Male_01", 108L, "ntt_44fd8a65", -4.0f, -1.9f, 56.0f, 0f, false),
-                ("Civilian_Female_01", 109L, "ntt_2cccad34", 4.0f, -1.9f, 56.0f, 0f, false)
+                ("Civilian_Male_01", 108L, "ntt_44fd8a65", -4.0f, -1.9f, 56.0f, 0f, false)
             };
         }
         else if (lower == "story_forli_03" || lower.Contains("grey_sky") || lower.Contains("greysky") || lower.Contains("siege"))
@@ -1046,16 +1175,16 @@ internal static class Program
             // Mission 3: A Grey Sky (Forli - Siege)
             region = "Forli"; mood = "Siege"; scene = "Forli_siege"; locationName = "Forli";
             playerX = 10.0f; playerY = 1.0f; playerZ = -30.0f; playerRot = 0f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 1;
+            objectiveNeutral = 8357; // Be careful not to be detected by the guards, or else they might execute their prisoners.
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Siege_Attacker_Leader", 101L, "ntt_bd49bc5f", 10.0f, 0.5f, -15.0f, 180f, true),
-                ("Siege_Attacker_Left", 102L, "ntt_6d68817b", 5.0f, 0.5f, -10.0f, 180f, true),
-                ("Siege_Attacker_Right", 103L, "ntt_0c585da4", 15.0f, 0.5f, -10.0f, 180f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 10.0f, 1.0f, -5.0f, 180f, true),
-                ("Special_Doctor_01", 105L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 2.0f, 0.5f, -25.0f, 90f, false),
-                ("Civilian_Male_01", 106L, "ntt_44fd8a65", 18.0f, 0.5f, -25.0f, -90f, false)
+                ("Siege_Inquisitor_Captain", 101L, "ntt_bd49bc5f", 10.0f, 0.5f, -15.0f, 180f, true),
+                ("Borgia_Siege_Brute", 102L, "ntt_6d68817b", 5.0f, 0.5f, -10.0f, 180f, true),
+                ("Borgia_Siege_Soldier", 103L, "ntt_0c585da4", 15.0f, 0.5f, -10.0f, 180f, true),
+                ("Captured_Assassin_Spy", 106L, "ntt_44fd8a65", 18.0f, 0.5f, -25.0f, -90f, false),
+                ("Special_Doctor_01", 105L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 2.0f, 0.5f, -25.0f, 90f, false)
             };
         }
         else if (lower == "story_forli_04" || lower.Contains("story_0017") || lower.Contains("one_for_all") || lower.Contains("forli_r1_3"))
@@ -1063,19 +1192,16 @@ internal static class Program
             // Mission 4: One for All (Forli - East Square Market)
             region = "Forli"; mood = "Dusk"; scene = "Forli_dusk"; locationName = "Forli";
             playerX = 25.0f; playerY = 1.0f; playerZ = -16.0f; playerRot = 90f;
-            targetCount = 3;
-            targetIds = new long[] { 101L, 102L, 103L };
+            targetCount = 1;
+            objectiveNeutral = 5660; // Meet with Niccolò Machiavelli and Escort him to his spy.
+            targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Enemy_TemplarContact_01", 101L, "ntt_bd49bc5f", 38.0f, 1.0f, -16.0f, -90f, true),
-                ("Enemy_HiredBlade_01", 102L, "ntt_6d68817b", 44.0f, 1.0f, -12.0f, 180f, true),
-                ("Enemy_Lookout_01", 103L, "ntt_0c585da4", 50.0f, 1.0f, -15.0f, -90f, true),
-                ("Enemy_Crossbow_01", 104L, "ntt_ed443896", 42.0f, 1.0f, -22.0f, 0f, true),
-                ("Enemy_Militia_01", 105L, "ntt_0c585da4", 36.0f, 1.0f, -20.0f, 0f, true),
-                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 30.0f, 1.0f, -10.0f, 90f, false),
-                ("Special_Courtesan_01", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 46.0f, 1.0f, -20.0f, -90f, false),
-                ("Civilian_Male_01", 108L, "ntt_44fd8a65", 34.0f, 1.0f, -14.0f, 90f, false),
-                ("Civilian_Female_01", 109L, "ntt_2cccad34", 48.0f, 1.0f, -18.0f, -90f, false)
+                ("Borgia_Lighthouse_Commander", 101L, "ntt_bd49bc5f", 38.0f, 1.0f, -16.0f, -90f, true),
+                ("Borgia_Perimeter_Guard_01", 102L, "ntt_6d68817b", 44.0f, 1.0f, -12.0f, 180f, true),
+                ("Niccolo_Machiavelli", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 30.0f, 1.0f, -10.0f, 90f, false),
+                ("Ezio_Auditore", 108L, "ntt_bd49bc5f", 34.0f, 1.0f, -14.0f, 90f, false),
+                ("Special_Courtesan_01", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 46.0f, 1.0f, -20.0f, -90f, false)
             };
         }
         else // Default / story_forli_01 / story_0015: An Unexpected Summon
@@ -1083,23 +1209,22 @@ internal static class Program
             region = "Forli"; mood = "Dusk"; scene = "Forli_dusk"; locationName = "Forli";
             playerX = -2.0f; playerY = 8.6f; playerZ = -40.0f; playerRot = 0f;
             targetCount = 3;
+            objectiveNeutral = 6507; // The Crows are hiding somewhere inside Forlì. You have to find all of them.
             targetIds = new long[] { 101L, 102L, 103L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Enemy_Militia_01", 101L, "ntt_0c585da4", -2.0f, 0.5f, -35.0f, 180f, true),
-                ("Enemy_Militia_02", 102L, "ntt_0c585da4", 1.0f, 0.5f, -28.0f, 180f, true),
-                ("Enemy_Captain_01", 103L, "ntt_bd49bc5f", -1.0f, 0.5f, -20.0f, 180f, true),
+                ("Hidden_Crow_Leader", 101L, "ntt_bd49bc5f", -2.0f, 0.5f, -35.0f, 180f, true),
+                ("Undercover_Crow_01", 102L, "ntt_0c585da4", 1.0f, 0.5f, -28.0f, 180f, true),
+                ("Undercover_Crow_02", 103L, "ntt_0c585da4", -1.0f, 0.5f, -20.0f, 180f, true),
                 ("Enemy_Crossbow_01", 104L, "ntt_ed443896", -3.5f, 8.6f, -24.0f, 180f, true),
                 ("Enemy_Brute_01", 105L, "ntt_6d68817b", 2.0f, 0.5f, -18.0f, 180f, true),
                 ("Civilian_Male_01", 106L, "ntt_44fd8a65", -4.0f, 0.5f, -32.0f, 90f, false),
-                ("Civilian_Female_01", 107L, "ntt_2cccad34", 2.0f, 0.5f, -32.0f, -90f, false),
-                ("Special_Courtesan_01", 108L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 3.0f, 0.5f, -26.0f, -90f, false),
                 ("Special_Doctor_01", 109L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -4.0f, 0.5f, -24.0f, 90f, false)
             };
         }
 
-        object file = AssembleMissionFile(missionId, era, region, mood, scene, locationName, playerX, playerY, playerZ, playerRot, targetIds, npcs);
-        object goals = CreateMissionGoals(targetCount, 3430);
+        object file = AssembleMissionFile(missionId, era, region, mood, scene, locationName, playerX, playerY, playerZ, playerRot, targetIds, npcs, objectiveNeutral, objectiveKind, targetCount);
+        object goals = CreateMissionGoals(targetCount, objectiveNeutral, goalType);
         return (file, goals);
     }
 
@@ -1397,48 +1522,48 @@ internal static class Program
         Type infoType = TypeOf("AcierProtocol.MissionInfo");
         Type locationType = TypeOf("AcierProtocol.LocationSet");
 
-        var campaignsDef = new (string id, string name, (string baseName, int titleId, string era, string region, string mood)[] missions)[]
+        var campaignsDef = new (string id, string name, (string baseName, int titleId, int objectiveId, int briefingId, string era, string region, string mood, string objType, string kind)[] missions)[]
         {
             (
                 "ntt_c350c141",
                 "Montreal - Animus VR Training",
-                new (string, int, string, string, string)[]
+                new (string, int, int, int, string, string, string, string, string)[]
                 {
-                    ("story_tutorial_01", 6914, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_tutorial_02", 6916, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_tutorial_03", 6917, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_tutorial_04", 6918, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_tutorial_05", 6694, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_tutorial_06", 6696, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_tutorial_07", 6695, "Italy", "Monteriggioni", "Daytime"),
+                    ("story_tutorial_01", 6914, 6910, 6913, "Italy", "Monteriggioni", "Daytime", "Tutorial_EObjectiveType", "ContractKill_EMissionKind"),
+                    ("story_tutorial_02", 6916, 6916, 6913, "Italy", "Monteriggioni", "Daytime", "Tutorial_EObjectiveType", "ContractKill_EMissionKind"),
+                    ("story_tutorial_03", 6917, 6917, 6922, "Italy", "Monteriggioni", "Daytime", "Tutorial_EObjectiveType", "ContractKill_EMissionKind"),
+                    ("story_tutorial_04", 6918, 6918, 6922, "Italy", "Monteriggioni", "Daytime", "Tutorial_EObjectiveType", "ContractKill_EMissionKind"),
+                    ("story_tutorial_05", 6694, 6694, 6913, "Italy", "Monteriggioni", "Daytime", "Tutorial_EObjectiveType", "ContractKill_EMissionKind"),
+                    ("story_tutorial_06", 6696, 6696, 6913, "Italy", "Monteriggioni", "Daytime", "Tutorial_EObjectiveType", "ContractKill_EMissionKind"),
+                    ("story_tutorial_07", 6695, 6695, 6913, "Italy", "Monteriggioni", "Daytime", "Tutorial_EObjectiveType", "ContractKill_EMissionKind"),
                 }
             ),
             (
                 "ntt_5572b4db",
                 "Italy - A Murder of Crows",
-                new (string, int, string, string, string)[]
+                new (string, int, int, int, string, string, string, string, string)[]
                 {
-                    ("story_crows_01", 2063, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_crows_02", 2064, "Italy", "Monteriggioni", "Nighttime"),
-                    ("story_crows_03", 2065, "Italy", "Firenze_Palazzo", "Daytime"),
-                    ("story_crows_04", 3330, "Italy", "Roma_Coloseum", "Afternoon"),
-                    ("story_crows_05", 3331, "Italy", "Firenze_SantaCroce", "Sunny"),
-                    ("story_crows_06", 4425, "Italy", "Roma_Coloseum", "Foggy"),
-                    ("story_crows_07", 3617, "Italy", "Firenze_Palazzo", "Daytime"),
-                    ("story_crows_08", 4501, "Italy", "Monteriggioni", "Daytime"),
-                    ("story_crows_09", 3618, "Italy", "Firenze_Palazzo", "Nighttime"),
-                    ("story_crows_10", 4502, "Italy", "Roma_Coloseum", "Afternoon"),
+                    ("story_crows_01", 2063, 2066, 2069, "Italy", "Monteriggioni", "Daytime", "Story_EObjectiveType", "Kill_EMissionKind"),
+                    ("story_crows_02", 2064, 2067, 2070, "Italy", "Monteriggioni", "Nighttime", "Story_EObjectiveType", "Kill_EMissionKind"),
+                    ("story_crows_03", 2065, 2068, 2071, "Italy", "Firenze_Palazzo", "Daytime", "Story_EObjectiveType", "Escort_EMissionKind"),
+                    ("story_crows_04", 3330, 3332, 3334, "Italy", "Roma_Coloseum", "Afternoon", "Story_EObjectiveType", "Kill_EMissionKind"),
+                    ("story_crows_05", 3331, 3333, 3335, "Italy", "Firenze_SantaCroce", "Sunny", "Story_EObjectiveType", "FreeCaptives_EMissionKind"),
+                    ("story_crows_06", 4425, 4423, 4421, "Italy", "Roma_Coloseum", "Foggy", "Story_EObjectiveType", "Kill_EMissionKind"),
+                    ("story_crows_07", 3617, 2086, 3615, "Italy", "Firenze_Palazzo", "Daytime", "Story_EObjectiveType", "IdentifyKill_EMissionKind"),
+                    ("story_crows_08", 4501, 4497, 4495, "Italy", "Monteriggioni", "Daytime", "Story_EObjectiveType", "Kill_EMissionKind"),
+                    ("story_crows_09", 3618, 4543, 3727, "Italy", "Firenze_Palazzo", "Nighttime", "Story_EObjectiveType", "Deliver_EMissionKind"),
+                    ("story_crows_10", 4502, 4498, 4490, "Italy", "Roma_Coloseum", "Afternoon", "Story_EObjectiveType", "Kill_EMissionKind"),
                 }
             ),
             (
                 "ntt_0dd81737",
                 "Forlì - A Crimson Sunset",
-                new (string, int, string, string, string)[]
+                new (string, int, int, int, string, string, string, string, string)[]
                 {
-                    ("story_forli_01", 5259, "Italy", "Forli", "Dusk"),
-                    ("story_forli_02", 5261, "Italy", "Forli", "Dusk"),
-                    ("story_forli_03", 8168, "Italy", "Forli", "Siege"),
-                    ("story_forli_04", 8169, "Italy", "Forli", "Dusk"),
+                    ("story_forli_01", 5259, 6507, 5646, "Italy", "Forli", "Dusk", "Story_EObjectiveType", "CrowHunt_EMissionKind"),
+                    ("story_forli_02", 5261, 6514, 6529, "Italy", "Forli", "Dusk", "Story_EObjectiveType", "CrowHunt_EMissionKind"),
+                    ("story_forli_03", 8168, 8357, 8362, "Italy", "Forli", "Siege", "Story_EObjectiveType", "FreeCaptives_EMissionKind"),
+                    ("story_forli_04", 8169, 5660, 8363, "Italy", "Forli", "Dusk", "Story_EObjectiveType", "Escort_EMissionKind"),
                 }
             )
         };
@@ -1477,6 +1602,10 @@ internal static class Program
                     Set(info, "objectiveLangKey", title);
                 }
                 Set(title, "neutral", mDef.titleId);
+                Set(info, "missionDescription", mDef.objectiveId);
+                Set(info, "missionFlavorTextLoca", mDef.briefingId);
+                Set(info, "objectiveBaseType", Enum.Parse(TypeOf("AcierProtocol.EObjectiveType"), mDef.objType));
+                Set(info, "missionKind", Enum.Parse(TypeOf("AcierProtocol.EMissionKind"), mDef.kind));
 
                 // Mission 0 in each campaign is unlocked initially; subsequent missions require previous mission reward entitlement!
                 if (m == 0)
@@ -1818,8 +1947,136 @@ internal static class Program
         File.WriteAllText(Path.Combine(_saveDir, "session.txt"), _sessionToken);
     }
 
+    private static void ExportCompanion(string outDir)
+    {
+        Directory.CreateDirectory(outDir);
+        Host = "127.0.0.1";
+        CdnUrl = "http://127.0.0.1:8080/cdn/ACID_2.8.2_373";
+        ApiUrl = "http://127.0.0.1:8080/acier/v1/api";
+
+        void SaveBin(string name, object resp)
+        {
+            var ms = new MemoryStream();
+            _serialize.Invoke(_serializer, new object[] { ms, resp });
+            File.WriteAllBytes(Path.Combine(outDir, name), ms.ToArray());
+            Console.WriteLine($"Exported {name} ({ms.Length} bytes)");
+        }
+
+        // 1. Core Service Responses
+        object dReq = New("AcierProtocol.Request");
+        Set(dReq, "discoveryServiceRequest", New("AcierProtocol.DiscoveryServiceRequest"));
+        SaveBin("discovery.bin", BuildResponse(dReq, "discoveryServiceRequest"));
+
+        object vReq = New("AcierProtocol.Request");
+        Set(vReq, "checkVersionRequest", New("AcierProtocol.CheckVersionRequest"));
+        SaveBin("checkVersion.bin", BuildResponse(vReq, "checkVersionRequest"));
+
+        object aReq = New("AcierProtocol.Request");
+        Set(aReq, "authAccountRequest", New("AcierProtocol.AuthAccountRequest"));
+        SaveBin("auth.bin", BuildResponse(aReq, "authAccountRequest"));
+
+        object sReq = New("AcierProtocol.Request");
+        Set(sReq, "getStaticsRequest", New("AcierProtocol.GetStaticsRequest"));
+        SaveBin("statics.bin", BuildResponse(sReq, "getStaticsRequest"));
+
+        object qReq = New("AcierProtocol.Request");
+        Set(qReq, "getQualitySettingsRequest", New("AcierProtocol.GetQualitySettingsRequest"));
+        SaveBin("quality.bin", BuildResponse(qReq, "getQualitySettingsRequest"));
+
+        object tReq = New("AcierProtocol.Request");
+        Set(tReq, "getTwitterTimelineRequest", New("AcierProtocol.GetTwitterTimelineRequest"));
+        SaveBin("twitter.bin", BuildResponse(tReq, "getTwitterTimelineRequest"));
+
+        object eReq = New("AcierProtocol.Request");
+        Set(eReq, "endMissionRequest", New("AcierProtocol.EndMissionRequest"));
+        SaveBin("endMission.bin", BuildResponse(eReq, "endMissionRequest"));
+
+        // 2. Missions
+        string[] missions = new string[]
+        {
+            "story_tutorial_01", "story_tutorial_02", "story_tutorial_03",
+            "story_tutorial_04", "story_tutorial_05", "story_tutorial_06", "story_tutorial_07",
+            "story_crows_01", "story_crows_02", "story_crows_03", "story_crows_04", "story_crows_05",
+            "story_crows_06", "story_crows_07", "story_crows_08", "story_crows_09", "story_crows_10",
+            "story_forli_01", "story_forli_02", "story_forli_03", "story_forli_04",
+            "story_0015", "story_0016", "story_0017", "default"
+        };
+
+        foreach (string m in missions)
+        {
+            string actualMid = m == "default" ? "story_0015" : m;
+            // GetMissionInfo
+            object mInfoReq = New("AcierProtocol.Request");
+            object infoReqObj = New("AcierProtocol.GetMissionInfoRequest");
+            Set(infoReqObj, "missionId", actualMid);
+            Set(mInfoReq, "getMissionInfoRequest", infoReqObj);
+            SaveBin($"getMissionInfo_{m}.bin", BuildResponse(mInfoReq, "getMissionInfoRequest"));
+
+            // OpenMission
+            object mOpenReq = New("AcierProtocol.Request");
+            object openReqObj = New("AcierProtocol.OpenMissionRequest");
+            Set(openReqObj, "missionId", actualMid);
+            Set(mOpenReq, "openMissionRequest", openReqObj);
+            SaveBin($"openMission_{m}.bin", BuildResponse(mOpenReq, "openMissionRequest"));
+        }
+
+        // 3. Catalogue JSON
+        var catJson = new StringBuilder();
+        catJson.AppendLine("{");
+        int idx = 0;
+        foreach (var kvp in Catalogue)
+        {
+            idx++;
+            string comma = idx < Catalogue.Count ? "," : "";
+            catJson.AppendLine($"  \"{kvp.Key}\": {{\"id\": \"{kvp.Value.Id}\", \"zipped\": {(kvp.Value.Zipped ? "true" : "false")}}}{comma}");
+        }
+        catJson.AppendLine("}");
+        File.WriteAllText(Path.Combine(outDir, "catalogue.json"), catJson.ToString());
+        Console.WriteLine($"Exported catalogue.json with {Catalogue.Count} assets");
+    }
+
     private static void SelfTest()
     {
+        object statics = Statics();
+        object catalog = Get(statics, "campaignCatalog");
+        Array campaigns = (Array)Get(catalog, "campaigns");
+        Console.WriteLine($"SelfTest Campaigns: {campaigns.Length}");
+        for (int i = 0; i < campaigns.Length; i++)
+        {
+            object c = campaigns.GetValue(i);
+            string cName = (string)Get(c, "name");
+            Array groups = (Array)Get(c, "missions");
+            Console.WriteLine($"Campaign {i}: {cName} ({groups.Length} missions)");
+            for (int m = 0; m < groups.Length; m++)
+            {
+                object g = groups.GetValue(m);
+                Array infos = (Array)Get(g, "missions");
+                object info = infos.GetValue(0);
+                string baseName = (string)Get(info, "baseName");
+                object title = Get(info, "objectiveLangKey");
+                int titleLoca = title != null ? (int)Get(title, "neutral") : 0;
+                int descLoca = (int)Get(info, "missionDescription");
+                int briefLoca = (int)Get(info, "missionFlavorTextLoca");
+                object kind = Get(info, "missionKind");
+                object objType = Get(info, "objectiveBaseType");
+                if (m < 2 || m == groups.Length - 1)
+                {
+                    Console.WriteLine($"  [{m}] {baseName}: Title={titleLoca}, Obj={descLoca}, Brief={briefLoca}, Kind={kind}, Type={objType}");
+                }
+            }
+        }
+        object c1Req = New("AcierProtocol.Request");
+        object c1InfoReq = New("AcierProtocol.GetMissionInfoRequest");
+        Set(c1InfoReq, "missionId", "story_crows_01");
+        Set(c1Req, "getMissionInfoRequest", c1InfoReq);
+        object c1Resp = BuildResponse(c1Req, "getMissionInfoRequest");
+        object c1Goals = Get(Get(c1Resp, "getMissionInfoResponse"), "missionGoals");
+        Array c1GoalList = (Array)Get(c1Goals, "missionGoals");
+        object c1G0 = c1GoalList.GetValue(0);
+        object c1Desc = Get(c1G0, "description");
+        int c1Neutral = (int)Get(c1Desc, "neutral");
+        Console.WriteLine($"SelfTest story_crows_01 Goal Loca: {c1Neutral} (Expected: 2066)");
+        if (c1Neutral != 2066) throw new InvalidOperationException("Goal neutral mismatch!");
         if (!Catalogue.ContainsKey("FirstContact_Android.xml")) throw new InvalidOperationException("catalogue missing FirstContact");
         if (!Catalogue.ContainsKey("GameDB_AndroidETC2.bin")) throw new InvalidOperationException("catalogue missing GameDB");
         object request = New("AcierProtocol.Request");
@@ -1887,6 +2144,27 @@ internal static class Program
                 }
             }
             if (!killOk) throw new InvalidOperationException("kill objective was not loaded");
+
+            object tut1Request = New("AcierProtocol.Request");
+            object tut1Open = New("AcierProtocol.OpenMissionRequest");
+            Set(tut1Open, "missionId", "story_tutorial_01");
+            Set(tut1Request, "openMissionRequest", tut1Open);
+            object tut1Response = BuildResponse(tut1Request, "openMissionRequest");
+            object tut1Opened = Get(Get(Get(tut1Response, "openMissionResponse"), "missionToken"), "missionFile");
+            object tut1Root = Get(tut1Opened, "RootNode");
+            object tut1Runtime = Activator.CreateInstance(nodeType, tut1Root);
+            object tut1List = nodeType.GetMethod("ComponentsRecursive").Invoke(tut1Runtime, null);
+            bool tut1InteractionOk = false;
+            foreach (object item in (System.Collections.IEnumerable)tut1List)
+            {
+                object data = item.GetType().GetProperty("NodeData").GetValue(item);
+                if (data != null && data.GetType().Name == "ObjectiveInteractionData")
+                {
+                    tut1InteractionOk = true;
+                    Console.WriteLine("found ObjectiveInteractionData for Tutorial 1!");
+                }
+            }
+            if (!tut1InteractionOk) throw new InvalidOperationException("interaction objective was not loaded for Tutorial 1");
         }
         catch (Exception ex)
         {

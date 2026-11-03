@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AcierOfflineServer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ea8b08e6099cb9f6fa745a73be7d3f624dc4d449")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0b97f49788ae3b46fb942f908c155f1e0913eb0d")]
 [assembly: System.Reflection.AssemblyProductAttribute("AcierOfflineServer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AcierOfflineServer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

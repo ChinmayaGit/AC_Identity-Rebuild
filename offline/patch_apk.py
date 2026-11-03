@@ -2,19 +2,26 @@
 """Patch AC Identity so discovery, response signatures, and Play licensing stay on this machine."""
 
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APK = ROOT / "Resorces" / "ACIdentity.apk"
 OUT_DIR = ROOT / "offline"
-UNSIGNED = OUT_DIR / "ACIdentity-offline-unsigned.apk"
-SIGNED = OUT_DIR / "ACIdentity-offline.apk"
 KEYSTORE = OUT_DIR / "debug.keystore"
 
+is_localhost = "--localhost" in sys.argv
+if is_localhost:
+    NEW_URL = b"http://127.0.0.1:8080/discovery/acier/v1/api"
+    UNSIGNED = OUT_DIR / "ACIdentity-offline-localhost-unsigned.apk"
+    SIGNED = OUT_DIR / "ACIdentity-offline-localhost.apk"
+else:
+    NEW_URL = b"http://192.168.1.2:8080/discovery/acier/v1/x"
+    UNSIGNED = OUT_DIR / "ACIdentity-offline-unsigned.apk"
+    SIGNED = OUT_DIR / "ACIdentity-offline.apk"
+
 OLD_URL = b"https://ac-id.ubi.com/discovery/acier/v1/api"
-# Same length as the original. The phone reaches this Mac on the LAN; 127.0.0.1 would be the phone itself.
-NEW_URL = b"http://192.168.1.2:8080/discovery/acier/v1/x"
 ASSET = "assets/bin/Data/400fee16fca9d6044aaacba59277df41"
 DLL = "assets/bin/Data/Managed/Assembly-CSharp.dll"
 CACHE = "assets/bin/Data/Managed/SharedBaseLib.dll"

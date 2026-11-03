@@ -1,0 +1,10 @@
+﻿<root>
+  <Filemap ItemCount="6">
+    <DataFile Name="AssetBundleDict_AndroidGeneric.xml" Hash="be72be8f2311d1603d8800f3c76da185" />
+    <DataFile Name="AssetBundleDict_AndroidDXT.xml" Hash="4f5fa462a61a76d0d70ce42d35d6e47b" />
+    <DataFile Name="AssetBundleDict_AndroidETC2.xml" Hash="01d21c9859aec3957d72133207ef9ad5" />
+    <DataFile Name="GameDB_AndroidGeneric.bin" Hash="418a12a1b0238af857a1532ad67665e9" />
+    <DataFile Name="GameDB_AndroidDXT.bin" Hash="b6e43ad01c839dc8902c7e34ab31fc7e" />
+    <DataFile Name="GameDB_AndroidETC2.bin" Hash="dd203f8d793592f83469d2b8a4108463" />
+  </Filemap>
+</root>
