@@ -1,0 +1,14 @@
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/bin/Debug/net10.0/Load
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/bin/Debug/net10.0/Load.deps.json
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/bin/Debug/net10.0/Load.runtimeconfig.json
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/bin/Debug/net10.0/Load.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/bin/Debug/net10.0/Load.pdb
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/Load.GeneratedMSBuildEditorConfig.editorconfig
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/Load.AssemblyInfoInputs.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/Load.AssemblyInfo.cs
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/Load.csproj.CoreCompileInputs.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/Load.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/refint/Load.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/Load.pdb
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/Load.genruntimeconfig.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/loadtest/obj/Debug/net10.0/ref/Load.dll

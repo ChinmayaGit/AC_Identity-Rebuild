@@ -1,0 +1,17 @@
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.GeneratedMSBuildEditorConfig.editorconfig
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.AssemblyInfoInputs.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.AssemblyInfo.cs
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.csproj.CoreCompileInputs.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/bin/Debug/net10.0/FindCalls
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/bin/Debug/net10.0/FindCalls.deps.json
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/bin/Debug/net10.0/FindCalls.runtimeconfig.json
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/bin/Debug/net10.0/FindCalls.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/bin/Debug/net10.0/FindCalls.pdb
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/refint/FindCalls.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.pdb
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.genruntimeconfig.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/ref/FindCalls.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/bin/Debug/net10.0/Mono.Cecil.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.csproj.AssemblyReference.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.csproj.Up2Date

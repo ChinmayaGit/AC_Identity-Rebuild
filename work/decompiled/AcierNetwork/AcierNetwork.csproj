@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>AcierNetwork</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <TargetFramework>net35</TargetFramework>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>14.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemGroup />
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>../../apk/assets/bin/Data/Managed/UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="SharedBaseLib">
+      <HintPath>../../apk/assets/bin/Data/Managed/SharedBaseLib.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Core">
+      <HintPath>../../apk/assets/bin/Data/Managed/System.Core.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

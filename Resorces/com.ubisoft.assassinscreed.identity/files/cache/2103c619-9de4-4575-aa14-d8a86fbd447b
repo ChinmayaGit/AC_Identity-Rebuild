@@ -1,0 +1,106 @@
+﻿<root>
+  <Scenes ItemCount="17">
+    <SceneInfo Name="AnimusGlobe">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_AnimusGlobe_High_Env_AndroidETC2.unity3d" BuildNumber="495264" Type="Environment" SourceFilesHash="V4_6d1622f01beb0db8ea3228d6b51e29ff" AssetBundleHash="619B1C54" AssetBundleFileSize="17192432" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_AnimusGlobe_Low_Env_AndroidETC2.unity3d" BuildNumber="495264" Type="Environment" SourceFilesHash="V4_fc2ea5fc4a8b23f169afc10c2292b953" AssetBundleHash="A93CEF26" AssetBundleFileSize="17194416" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="TutorialScene_01">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_TutorialScene_01_High_Env_AndroidETC2.unity3d" BuildNumber="494709" Type="Environment" SourceFilesHash="V4_46d47713e6b6e7adfe062445fa0d04ed" AssetBundleHash="2C41131A" AssetBundleFileSize="17045340" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_TutorialScene_01_Low_Env_AndroidETC2.unity3d" BuildNumber="494709" Type="Environment" SourceFilesHash="V4_df55b79813914925b44e011b488f6dcb" AssetBundleHash="FBB272DA" AssetBundleFileSize="17739076" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="TutorialScene_02">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_TutorialScene_02_High_Env_AndroidETC2.unity3d" BuildNumber="494716" Type="Environment" SourceFilesHash="V4_de871c3aadbc67c30ad5418260e54198" AssetBundleHash="FD188D4A" AssetBundleFileSize="17826876" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_TutorialScene_02_Low_Env_AndroidETC2.unity3d" BuildNumber="494716" Type="Environment" SourceFilesHash="V4_2edba973600e93639925b76db3912024" AssetBundleHash="58593DB6" AssetBundleFileSize="17826492" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="TutorialScene_03">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_TutorialScene_03_High_Env_AndroidETC2.unity3d" BuildNumber="494701" Type="Environment" SourceFilesHash="V4_f2d11a19c246bcf25ee78da39f15b6dd" AssetBundleHash="16F3A1D4" AssetBundleFileSize="23362644" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvAnimus_TutorialScene_03_Low_Env_AndroidETC2.unity3d" BuildNumber="494701" Type="Environment" SourceFilesHash="V4_cde70355a23b933adbab977574272094" AssetBundleHash="2736D45A" AssetBundleFileSize="21264676" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Firenze_palazzo_daytime">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_palazzo_daytime_High_Env_AndroidETC2.unity3d" BuildNumber="494717" Type="Environment" SourceFilesHash="V4_ba8b9589a41937f4220659084f835005" AssetBundleHash="81DCB33C" AssetBundleFileSize="92912996" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_palazzo_daytime_Low_Env_AndroidETC2.unity3d" BuildNumber="494717" Type="Environment" SourceFilesHash="V4_ba8b9589a41937f4220659084f835005" AssetBundleHash="B6665E1F" AssetBundleFileSize="68375484" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Firenze_palazzo_nighttime">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_palazzo_nighttime_High_Env_AndroidETC2.unity3d" BuildNumber="494710" Type="Environment" SourceFilesHash="V4_c5df73893d581ecdb87de633bf1110f0" AssetBundleHash="A024579F" AssetBundleFileSize="92997260" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_palazzo_nighttime_Low_Env_AndroidETC2.unity3d" BuildNumber="494710" Type="Environment" SourceFilesHash="V4_c5df73893d581ecdb87de633bf1110f0" AssetBundleHash="5A288D5F" AssetBundleFileSize="70099692" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Firenze_santacroce_stormy">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_santacroce_stormy_High_Env_AndroidETC2.unity3d" BuildNumber="494711" Type="Environment" SourceFilesHash="V4_0c39211620f18449f957ec66e00ef8f7" AssetBundleHash="D2036969" AssetBundleFileSize="118579212" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_santacroce_stormy_Low_Env_AndroidETC2.unity3d" BuildNumber="494711" Type="Environment" SourceFilesHash="V4_0c39211620f18449f957ec66e00ef8f7" AssetBundleHash="685C5445" AssetBundleFileSize="90059300" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Firenze_santacroce_sunny">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_santacroce_sunny_High_Env_AndroidETC2.unity3d" BuildNumber="494715" Type="Environment" SourceFilesHash="V4_cc7d318f687d4c867c6d1a2941a89308" AssetBundleHash="848A4438" AssetBundleFileSize="113627464" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_santacroce_sunny_Low_Env_AndroidETC2.unity3d" BuildNumber="494715" Type="Environment" SourceFilesHash="V4_cc7d318f687d4c867c6d1a2941a89308" AssetBundleHash="5B762043" AssetBundleFileSize="81239764" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Firenze_santacroce_Tutorial">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_santacroce_Tutorial_High_Env_AndroidETC2.unity3d" BuildNumber="494708" Type="Environment" SourceFilesHash="V4_42d6f83fa4fc6a839525615bd86eb45c" AssetBundleHash="017F95E8" AssetBundleFileSize="105646348" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Firenze_santacroce_Tutorial_Low_Env_AndroidETC2.unity3d" BuildNumber="494708" Type="Environment" SourceFilesHash="V4_42d6f83fa4fc6a839525615bd86eb45c" AssetBundleHash="6D6086CE" AssetBundleFileSize="78719352" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Forli_dusk">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Forli_dusk_High_Env_AndroidETC2.unity3d" BuildNumber="495180" Type="Environment" SourceFilesHash="V4_20dffb50246322ac6a421385613d3ab6" AssetBundleHash="4F91E72D" AssetBundleFileSize="108749028" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Forli_dusk_Low_Env_AndroidETC2.unity3d" BuildNumber="495180" Type="Environment" SourceFilesHash="V4_20dffb50246322ac6a421385613d3ab6" AssetBundleHash="3ED71108" AssetBundleFileSize="76212364" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Forli_siege">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Forli_siege_High_Env_AndroidETC2.unity3d" BuildNumber="495180" Type="Environment" SourceFilesHash="V4_19eae5a54b642615370285c505b9ebfb" AssetBundleHash="4BB01392" AssetBundleFileSize="95105396" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Forli_siege_Low_Env_AndroidETC2.unity3d" BuildNumber="495180" Type="Environment" SourceFilesHash="V4_19eae5a54b642615370285c505b9ebfb" AssetBundleHash="DF969D54" AssetBundleFileSize="71700140" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="MonteRiggioni_DayTime">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_MonteRiggioni_DayTime_High_Env_AndroidETC2.unity3d" BuildNumber="494701" Type="Environment" SourceFilesHash="V4_d07b64651ed3816173fb1de91d110573" AssetBundleHash="DF4F6CC2" AssetBundleFileSize="90463000" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_MonteRiggioni_DayTime_Low_Env_AndroidETC2.unity3d" BuildNumber="494701" Type="Environment" SourceFilesHash="V4_d07b64651ed3816173fb1de91d110573" AssetBundleHash="D6E8269F" AssetBundleFileSize="69557160" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="MonteRiggioni_NightTime">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_MonteRiggioni_NightTime_High_Env_AndroidETC2.unity3d" BuildNumber="494717" Type="Environment" SourceFilesHash="V4_2267d4b0edd77aa5e6c6876d624a1183" AssetBundleHash="3EC1E746" AssetBundleFileSize="95480368" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_MonteRiggioni_NightTime_Low_Env_AndroidETC2.unity3d" BuildNumber="494717" Type="Environment" SourceFilesHash="V4_2267d4b0edd77aa5e6c6876d624a1183" AssetBundleHash="A572A843" AssetBundleFileSize="73387888" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Roma_Castello_SantAngelo_Overcast">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Castello_SantAngelo_Overcast_High_Env_AndroidETC2.unity3d" BuildNumber="494712" Type="Environment" SourceFilesHash="V4_fc2acb03b7779677fa9095f454fc6974" AssetBundleHash="20D64676" AssetBundleFileSize="100873412" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Castello_SantAngelo_Overcast_Low_Env_AndroidETC2.unity3d" BuildNumber="494712" Type="Environment" SourceFilesHash="V4_fc2acb03b7779677fa9095f454fc6974" AssetBundleHash="A6CFD0B3" AssetBundleFileSize="79049672" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Roma_Castello_SantAngelo_stormy">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Castello_SantAngelo_stormy_High_Env_AndroidETC2.unity3d" BuildNumber="494704" Type="Environment" SourceFilesHash="V4_25ef54ede7808a9e640deebfb7ab3003" AssetBundleHash="B141811C" AssetBundleFileSize="101556144" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Castello_SantAngelo_stormy_Low_Env_AndroidETC2.unity3d" BuildNumber="494704" Type="Environment" SourceFilesHash="V4_25ef54ede7808a9e640deebfb7ab3003" AssetBundleHash="620BB643" AssetBundleFileSize="80997976" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Roma_Coloseum_Afternoon">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Coloseum_Afternoon_High_Env_AndroidETC2.unity3d" BuildNumber="494705" Type="Environment" SourceFilesHash="V4_314e02aff6b96fb3d296dccfb75d4b51" AssetBundleHash="91463C88" AssetBundleFileSize="101569360" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Coloseum_Afternoon_Low_Env_AndroidETC2.unity3d" BuildNumber="494705" Type="Environment" SourceFilesHash="V4_314e02aff6b96fb3d296dccfb75d4b51" AssetBundleHash="C675C36F" AssetBundleFileSize="74619768" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+    <SceneInfo Name="Roma_Coloseum_Foggy">
+      <AssetBundleInfos ItemCount="2">
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Coloseum_Foggy_High_Env_AndroidETC2.unity3d" BuildNumber="494701" Type="Environment" SourceFilesHash="V4_0d3d8a06cfc5e8ebd21daf4f39afdcfa" AssetBundleHash="7D141C1B" AssetBundleFileSize="96663616" EnforceLoading="False" Quality="High" />
+        <AssetBundleInfo BundleId="0" URL="AssetBundles/EnvItaly_Roma_Coloseum_Foggy_Low_Env_AndroidETC2.unity3d" BuildNumber="494701" Type="Environment" SourceFilesHash="V4_0d3d8a06cfc5e8ebd21daf4f39afdcfa" AssetBundleHash="308A7F29" AssetBundleFileSize="69951928" EnforceLoading="False" Quality="Low" />
+      </AssetBundleInfos>
+    </SceneInfo>
+  </Scenes>
+</root>

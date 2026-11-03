@@ -1,0 +1,1 @@
+Member 'M:Assets.Scripts.UI.State.ProfileManager.ProfileManager.GetStatics(System.AsyncCallback)' was not found in this module. Expected an XML documentation id string (e.g. "M:System.String.Concat(System.String,System.String)") or a metadata token (e.g. 0x06000005). The parameter list and generic arities may be left off.

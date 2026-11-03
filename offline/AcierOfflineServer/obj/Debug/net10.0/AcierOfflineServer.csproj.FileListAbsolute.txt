@@ -1,0 +1,14 @@
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/bin/Debug/net10.0/AcierOfflineServer
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/bin/Debug/net10.0/AcierOfflineServer.deps.json
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/bin/Debug/net10.0/AcierOfflineServer.runtimeconfig.json
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/bin/Debug/net10.0/AcierOfflineServer.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/bin/Debug/net10.0/AcierOfflineServer.pdb
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.GeneratedMSBuildEditorConfig.editorconfig
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.AssemblyInfoInputs.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.AssemblyInfo.cs
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.csproj.CoreCompileInputs.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/refint/AcierOfflineServer.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.pdb
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.genruntimeconfig.cache
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/ref/AcierOfflineServer.dll
