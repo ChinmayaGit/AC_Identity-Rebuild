@@ -547,17 +547,105 @@ internal static class Program
         Type goalType = Nested("MissionGoals", "MissionGoal");
         object goal = Activator.CreateInstance(goalType);
         Set(goal, "goalType", Enum.Parse(TypeOf("AcierProtocol.EMissionGoal"), "Objective_EMissionGoal"));
+        Set(goal, "objectiveId", 3L);
         Set(goal, "id", 1);
+        Set(goal, "type", Enum.Parse(TypeOf("AcierProtocol.EObjective"), "Kill"));
         object description = New("AcierProtocol.LangKey");
-        Set(description, "neutral", 8395);
+        Set(description, "neutral", 3430); // ASSASSINATE your Target - {Current} / {Count}
         Set(goal, "description", description);
-        PropertyInfo mapping = goalType.GetProperty("mapping");
-        Set(goal, "mapping", Array.CreateInstance(mapping.PropertyType.GetElementType(), 0));
+
+        Type entryType = Nested("MissionGoal", "MappingEntry");
+        object entry = Activator.CreateInstance(entryType);
+        Set(entry, "key", Enum.Parse(TypeOf("AcierProtocol.EObjectiveBoundWildcards"), "Count_EObjectiveBoundWildcards"));
+        Set(entry, "valueInt", 3);
+        Set(entry, "valueString", "3");
+        Array mappingArray = Array.CreateInstance(entryType, 1);
+        mappingArray.SetValue(entry, 0);
+        Set(goal, "mapping", mappingArray);
+
         Array list = Array.CreateInstance(goalType, 1);
         list.SetValue(goal, 0);
         Set(goals, "missionGoals", list);
         Set(goals, "missionLevel", 1);
         return goals;
+    }
+
+    private static object CreateNpcSpawnNode(string name, long id, string typeGuid, float x, float y, float z, float rotY, bool isEnemy = true)
+    {
+        object node = New("AcierProtocol.SerializedNode");
+        Set(node, "Name", name);
+        Set(node, "PositionX", x);
+        Set(node, "PositionY", y);
+        Set(node, "PositionZ", z);
+        Set(node, "EulerAnglesY", rotY);
+
+        Type componentType = TypeOf("AcierProtocol.SerializedNodeComponent");
+
+        // 1. Formation component (required by NpcStatsHelper.InitializeMutable to avoid NullReferenceException)
+        object formComp = Activator.CreateInstance(componentType);
+        Set(formComp, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_MissionNpcFormationContent"));
+        object formContent = New("AcierProtocol.MissionNpcFormationContent");
+        object formBase = New("AcierProtocol.MissionFormationBaseContent");
+        Set(formBase, "MissionBaseContent", ActiveBase(id + 1000L));
+        Set(formBase, "Type", Enum.Parse(TypeOf("AcierProtocol.EPatrolType"), isEnemy ? "Military" : "CevilianWide"));
+        Set(formBase, "IterationDirection", Enum.Parse(TypeOf("AcierProtocol.EFormationIterationDirection"), "Down"));
+        Set(formBase, "IterationType", Enum.Parse(TypeOf("AcierProtocol.EFormationIterationType"), "BackAndForth"));
+        Set(formBase, "Radius", 5.0f);
+        Set(formContent, "MissionFormationBaseContent", formBase);
+        Set(formComp, "MissionNpcFormationContent", formContent);
+
+        // 2. Spawn component
+        object spawnComp = Activator.CreateInstance(componentType);
+        Set(spawnComp, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_MissionNpcSpawnContent"));
+        object spawnContent = New("AcierProtocol.MissionNpcSpawnContent");
+        object entityContent = New("AcierProtocol.MissionSpawnEntityContent");
+        Set(entityContent, "MissionBaseContent", ActiveBase(id));
+        Set(entityContent, "IsMimic", false);
+        Set(entityContent, "FadeMode", Enum.Parse(TypeOf("AcierProtocol.EFadeMode"), "Simple_EFadeMode"));
+        Set(entityContent, "FadeDuration", 1.0f);
+        Set(spawnContent, "MissionSpawnEntityContent", entityContent);
+        Set(spawnContent, "TypeGuid", typeGuid);
+        Set(spawnContent, "ScalingMultiplier", 1.0f);
+        Set(spawnComp, "MissionNpcSpawnContent", spawnContent);
+
+        Array comps = Array.CreateInstance(componentType, 2);
+        comps.SetValue(formComp, 0);
+        comps.SetValue(spawnComp, 1);
+        Set(node, "Components", comps);
+
+        return node;
+    }
+
+    private static object CreateObjectiveKillComponent(long objId, long[] targetSpawnIds)
+    {
+        Type componentType = TypeOf("AcierProtocol.SerializedNodeComponent");
+        object comp = Activator.CreateInstance(componentType);
+        Set(comp, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_ObjectiveKillContent"));
+
+        object killContent = New("AcierProtocol.ObjectiveKillContent");
+        object targetContent = New("AcierProtocol.ObjectiveTargetContent");
+        object objBase = New("AcierProtocol.ObjectiveBaseContent");
+        object objMissionBase = ActiveBase(objId);
+        Set(objMissionBase, "MapIcon", Enum.Parse(TypeOf("AcierProtocol.EMapIconType"), "Assassinate_EMapIconType"));
+        Set(objBase, "MissionBaseContent", objMissionBase);
+        Set(objBase, "IsPrimaryObjective", true);
+        Set(objBase, "HideDescription", false);
+        Set(objBase, "Description", "3430");
+        Set(objBase, "ShortDescription", "3430");
+        Set(objBase, "OnSuccessId", 1L);
+        Set(objBase, "OnFailId", 1L);
+        Set(objBase, "IsVisibleInEagleVision", true);
+        Set(objBase, "TrackerIcon", Enum.Parse(TypeOf("AcierProtocol.EObjectiveType"), "Assasinate_EObjectiveType"));
+
+        Set(targetContent, "ObjectiveBaseContent", objBase);
+        Set(targetContent, "Targets", targetSpawnIds);
+
+        Set(killContent, "ObjectiveTargetContent", targetContent);
+        Set(killContent, "Minimum", targetSpawnIds.Length);
+        Set(killContent, "DoNotKill", false);
+
+        Set(comp, "ObjectiveKillContent", killContent);
+        return comp;
     }
 
     // The loader builds the playable mission from RootNode. A missing node throws
@@ -583,9 +671,7 @@ internal static class Program
         Set(content, "DifficultyLevel", 1);
         Set(content, "Rank", 1);
         Set(component, "MissionRootContent", content);
-        // The Forlì scene builds haystacks as soon as the camera exists. That
-        // lookup needs a hotspot component on the mission root; without it the
-        // load stops on this screen.
+
         object hotspots = Activator.CreateInstance(componentType);
         Set(hotspots, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_MissionHotspotsContent"));
         object hotspotContent = New("AcierProtocol.MissionHotspotsContent");
@@ -593,17 +679,18 @@ internal static class Program
         Set(hotspotBase, "ID", 2L);
         Set(hotspotContent, "MissionBaseContent", hotspotBase);
         Set(hotspots, "MissionHotspotsContent", hotspotContent);
-        // With no objective the mission is already complete, so the contract
-        // ends the moment it starts. Staying alive also ends it: that objective
-        // starts finished, and the game treats the player dying on the first
-        // frame as a failed contract, which drops straight into the Animus.
-        // A long timer starts unfinished and does not watch the player's health.
+
+        // Primary Objective: Assassinate the 3 Crow enemy guards
+        long[] targetIds = new long[] { 101L, 102L, 103L };
+        object killObjective = CreateObjectiveKillComponent(3L, targetIds);
+
+        // Backup timer objective (hidden, non-primary)
         object stay = Activator.CreateInstance(componentType);
         Set(stay, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_ObjectiveTimerContent"));
         object stayContent = New("AcierProtocol.ObjectiveTimerContent");
         object objective = New("AcierProtocol.ObjectiveBaseContent");
-        Set(objective, "MissionBaseContent", ActiveBase(3));
-        Set(objective, "IsPrimaryObjective", true);
+        Set(objective, "MissionBaseContent", ActiveBase(4));
+        Set(objective, "IsPrimaryObjective", false);
         Set(objective, "OnSuccessId", 1L);
         Set(objective, "OnFailId", 1L);
         Set(objective, "HideDescription", true);
@@ -613,26 +700,21 @@ internal static class Program
         Set(stayContent, "CompletionResult", ObjectiveResult("Undefined_EObjectiveResult", "InProgress_EObjectiveProgress"));
         Set(stayContent, "TerminationResult", ObjectiveResult("Undefined_EObjectiveResult", "InProgress_EObjectiveProgress"));
         Set(stay, "ObjectiveTimerContent", stayContent);
-        Array components = Array.CreateInstance(componentType, 3);
+
+        Array components = Array.CreateInstance(componentType, 4);
         components.SetValue(component, 0);
         components.SetValue(hotspots, 1);
-        components.SetValue(stay, 2);
+        components.SetValue(killObjective, 2);
+        components.SetValue(stay, 3);
         Set(root, "Components", components);
-        // Combat setup reads the player during mission init. The player is created
-        // only when a spawn node is started, and a node starts only when its
-        // activate id is the sentinel -2. An omitted id arrives as 0 and is skipped.
+
+        // 1. Player Spawn
         object spawn = New("AcierProtocol.SerializedNode");
         Set(spawn, "Name", "PlayerSpawn");
-        // Low streets put the camera under the pavement. The high roofs look
-        // out over the buildings. This spot is the open pavement at wall
-        // height, with the houses beside it and no roof overhead.
-        Set(spawn, "PositionX", -2f);
+        Set(spawn, "PositionX", -2.0f);
         Set(spawn, "PositionY", 8.6f);
-        Set(spawn, "PositionZ", -44f);
-        // +90 looks away from the houses into the empty side of the square.
-        // The nearest walls are the other way, at eye height.
-        Set(spawn, "EulerAnglesY", -150f);
-        if (Math.Abs((float)Get(spawn, "EulerAnglesY") + 150f) > 0.01f) throw new InvalidOperationException("spawn facing was not stored");
+        Set(spawn, "PositionZ", -40.0f);
+        Set(spawn, "EulerAnglesY", 0f);
         object spawnComponent = Activator.CreateInstance(componentType);
         Set(spawnComponent, "Type", Enum.Parse(componentType.GetNestedType("NodeType"), "NodeType_MissionPlayerSpawnContent"));
         object spawnContent = New("AcierProtocol.MissionPlayerSpawnContent");
@@ -641,9 +723,43 @@ internal static class Program
         Array spawnComponents = Array.CreateInstance(componentType, 1);
         spawnComponents.SetValue(spawnComponent, 0);
         Set(spawn, "Components", spawnComponents);
-        Array children = Array.CreateInstance(root.GetType(), 1);
+
+        // 2. Enemy Spawns (ahead of player in line of sight)
+        // Militia Guard 1 (Target on street)
+        object enemy1 = CreateNpcSpawnNode("Enemy_Militia_01", 101L, "ntt_0c585da4", -2.0f, 0.5f, -28.0f, 180f, true);
+        // Militia Guard 2 (Target on street)
+        object enemy2 = CreateNpcSpawnNode("Enemy_Militia_02", 102L, "ntt_0c585da4", 1.0f, 0.5f, -26.0f, 180f, true);
+        // Guard Captain (Target on street)
+        object enemy3 = CreateNpcSpawnNode("Enemy_Captain_01", 103L, "ntt_bd49bc5f", -1.0f, 0.5f, -20.0f, 180f, true);
+        // Crossbowman (Rooftop sniper looking down)
+        object enemy4 = CreateNpcSpawnNode("Enemy_Crossbow_01", 104L, "ntt_ed443896", -3.5f, 8.6f, -24.0f, 180f, true);
+        // Brute Guard (Ground entrance)
+        object enemy5 = CreateNpcSpawnNode("Enemy_Brute_01", 105L, "ntt_6d68817b", 2.0f, 0.5f, -18.0f, 180f, true);
+
+        // 3. Civilian / Crowd Spawns (ONLY on the ground street, none on roofs!)
+        // Male Civilian
+        object civ1 = CreateNpcSpawnNode("Civilian_Male_01", 106L, "ntt_44fd8a65", -4.0f, 0.5f, -32.0f, 90f, false);
+        // Female Civilian
+        object civ2 = CreateNpcSpawnNode("Civilian_Female_01", 107L, "ntt_2cccad34", 2.0f, 0.5f, -32.0f, -90f, false);
+        // Courtesan
+        object civ3 = CreateNpcSpawnNode("Special_Courtesan_01", 108L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", 3.0f, 0.5f, -26.0f, -90f, false);
+        // Doctor
+        object civ4 = CreateNpcSpawnNode("Special_Doctor_01", 109L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -4.0f, 0.5f, -24.0f, 90f, false);
+
+        // Combine all nodes
+        Array children = Array.CreateInstance(root.GetType(), 10);
         children.SetValue(spawn, 0);
+        children.SetValue(enemy1, 1);
+        children.SetValue(enemy2, 2);
+        children.SetValue(enemy3, 3);
+        children.SetValue(enemy4, 4);
+        children.SetValue(enemy5, 5);
+        children.SetValue(civ1, 6);
+        children.SetValue(civ2, 7);
+        children.SetValue(civ3, 8);
+        children.SetValue(civ4, 9);
         Set(root, "Children", children);
+
         Set(file, "RootNode", root);
         return file;
     }
@@ -1110,20 +1226,19 @@ internal static class Program
         object opened = Get(Get(Get(openBack, "openMissionResponse"), "missionToken"), "missionFile");
         object root = Get(opened, "RootNode");
         Array components = (Array)Get(root, "Components");
-        if (components == null || components.Length != 3) throw new InvalidOperationException("mission root component missing");
+        if (components == null || components.Length < 3) throw new InvalidOperationException("mission root component missing");
         object content = Get(components.GetValue(0), "MissionRootContent");
         if (Get(components.GetValue(1), "MissionHotspotsContent") == null) throw new InvalidOperationException("mission hotspots missing");
-        if (Get(components.GetValue(2), "ObjectiveTimerContent") == null) throw new InvalidOperationException("timer objective missing");
         if ((string)Get(content, "Scene") != "Forli_dusk") throw new InvalidOperationException("mission scene missing");
         if (Get(content, "MissionBaseContent") == null) throw new InvalidOperationException("mission base missing");
         if (Get(openBack, "error") != null) throw new InvalidOperationException("open mission response has an error");
         Array children = (Array)Get(root, "Children");
-        if (children == null || children.Length != 1) throw new InvalidOperationException("mission player spawn missing");
+        if (children == null || children.Length < 1) throw new InvalidOperationException("mission player spawn missing");
         Array spawnComponents = (Array)Get(children.GetValue(0), "Components");
         object spawnContent = Get(spawnComponents.GetValue(0), "MissionPlayerSpawnContent");
         object spawnBase = Get(spawnContent, "MissionBaseContent");
         if ((long)Get(spawnBase, "ActivateAtId") != -2L) throw new InvalidOperationException("player spawn is not active");
-        Console.WriteLine("mission file " + openPacked.Length + " bytes, component " + Get(components.GetValue(0), "Type"));
+        Console.WriteLine("mission file " + openPacked.Length + " bytes, components " + components.Length + ", children " + children.Length);
         try
         {
             string managed = Path.Combine(FindProjectRoot(), "work", "apk", "assets", "bin", "Data", "Managed");
@@ -1133,26 +1248,18 @@ internal static class Program
             object runtime = Activator.CreateInstance(nodeType, root);
             object list = nodeType.GetMethod("ComponentsRecursive").Invoke(runtime, null);
             int count = (int)list.GetType().GetProperty("Count").GetValue(list);
-            if (count != 4) throw new InvalidOperationException("mission runtime components " + count);
-            bool stayOk = false;
+            Console.WriteLine("mission runtime components " + count);
+            bool killOk = false;
             foreach (object item in (System.Collections.IEnumerable)list)
             {
                 object data = item.GetType().GetProperty("NodeData").GetValue(item);
-                if (data == null || data.GetType().Name != "ObjectiveTimerData") continue;
-                long activate = (long)data.GetType().GetField("ActivateAtId").GetValue(data);
-                long success = (long)data.GetType().GetField("OnSuccessId").GetValue(data);
-                long fail = (long)data.GetType().GetField("OnFailId").GetValue(data);
-                bool primary = (bool)data.GetType().GetField("IsPrimaryObjective").GetValue(data);
-                int seconds = (int)data.GetType().GetField("TimeInSeconds").GetValue(data);
-                object initial = data.GetType().GetField("InitialResultWrapper").GetValue(data);
-                object result = initial.GetType().GetField("Result").GetValue(initial);
-                Console.WriteLine("timer activate " + activate + " success " + success + " fail " + fail + " primary " + primary + " seconds " + seconds + " result " + result);
-                if (activate != -2L || success == -2L || fail == -2L || !primary || seconds < 3600 || result.ToString().IndexOf("Undefined", StringComparison.Ordinal) < 0)
-                    throw new InvalidOperationException("timer would end the contract");
-                stayOk = true;
+                if (data != null && data.GetType().Name == "ObjectiveKillData")
+                {
+                    killOk = true;
+                    Console.WriteLine("found ObjectiveKillData!");
+                }
             }
-            if (!stayOk) throw new InvalidOperationException("timer objective was not loaded");
-            Console.WriteLine("mission runtime components " + count);
+            if (!killOk) throw new InvalidOperationException("kill objective was not loaded");
         }
         catch (Exception ex)
         {

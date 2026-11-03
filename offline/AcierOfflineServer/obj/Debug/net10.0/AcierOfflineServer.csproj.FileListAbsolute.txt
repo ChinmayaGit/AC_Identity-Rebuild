@@ -12,3 +12,4 @@
 /Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.pdb
 /Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.genruntimeconfig.cache
 /Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/ref/AcierOfflineServer.dll
+/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/Debug/net10.0/AcierOfflineServer.sourcelink.json
