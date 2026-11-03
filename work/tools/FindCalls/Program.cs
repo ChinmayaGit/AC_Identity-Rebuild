@@ -1,25 +1,10 @@
-using Mono.Cecil;
-using Mono.Cecil.Cil;
+using System;
+using System.IO;
+using System.Reflection;
 
-string dll = args[0];
-string needle = args[1];
-var module = ModuleDefinition.ReadModule(dll);
-foreach (TypeDefinition type in module.Types)
-    Walk(type, needle);
+// Let test building a SerializedNode for AnimusGlobe
+var proto = Assembly.LoadFrom("work/apk/assets/bin/Data/Managed/AcierProtocol.dll");
+var game = Assembly.LoadFrom("work/apk/assets/bin/Data/Managed/Assembly-CSharp.dll");
 
-static void Walk(TypeDefinition type, string needle)
-{
-    foreach (MethodDefinition method in type.Methods)
-    {
-        if (!method.HasBody) continue;
-        foreach (Instruction instruction in method.Body.Instructions)
-        {
-            string text = instruction.Operand?.ToString() ?? "";
-            if (text.IndexOf(needle, StringComparison.Ordinal) < 0) continue;
-            Console.WriteLine(type.FullName + "::" + method.Name + " -> " + text);
-            break;
-        }
-    }
-    foreach (TypeDefinition nested in type.NestedTypes)
-        Walk(nested, needle);
-}
+var nodeType = game.GetType("Assets.Scripts.Network.Missions.Mission.Serialization.SerializedNode");
+Console.WriteLine("nodeType: " + nodeType);

@@ -15,3 +15,4 @@
 /Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/bin/Debug/net10.0/Mono.Cecil.dll
 /Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.csproj.AssemblyReference.cache
 /Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.csproj.Up2Date
+/Users/chinmaya/Documents/Projects/Own/AC Identity/work/tools/FindCalls/obj/Debug/net10.0/FindCalls.sourcelink.json

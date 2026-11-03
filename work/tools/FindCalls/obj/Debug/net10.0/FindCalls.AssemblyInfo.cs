@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FindCalls")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ea8b08e6099cb9f6fa745a73be7d3f624dc4d449")]
 [assembly: System.Reflection.AssemblyProductAttribute("FindCalls")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FindCalls")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
