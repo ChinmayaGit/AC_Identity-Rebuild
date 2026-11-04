@@ -241,21 +241,22 @@ internal static class Program
                 Set(response, "openMissionResponse", opened);
                 break;
             case "endMissionRequest":
-                object ended = New("AcierProtocol.EndMissionResponse");
-                object endReward = MissionReward(500L, 1000L);
-                Set(ended, "missionReward", endReward);
-                Set(response, "endMissionResponse", ended);
-
                 object endReq = Get(request, "endMissionRequest");
                 bool won = endReq != null && (bool)Get(endReq, "won");
                 string activeMid = _activeMissionId ?? "story_0015";
                 Console.WriteLine($"endMissionRequest: won={won}, activeMission={activeMid}");
+
+                object ended = New("AcierProtocol.EndMissionResponse");
+                object endReward = MissionReward(500L, 1000L);
                 if (won)
                 {
                     GrantStoryCompletion(activeMid);
                     AddProfileReward(500, 1000);
                     SaveProfile();
+                    Set(endReward, "entitlements", new string[] { $"ntt_story_reward_{activeMid}", $"ntt_story_challenge_{activeMid}" });
                 }
+                Set(ended, "missionReward", endReward);
+                Set(response, "endMissionResponse", ended);
                 Set(response, "userProfile", _profile);
                 break;
             case "removeHirelingAndMissionRequest":
@@ -1003,19 +1004,20 @@ internal static class Program
         {
             // Mission 3: Vengeful Eyes (Firenze Palazzo - Daytime) - Defending Leonardo da Vinci
             region = "Firenze_Palazzo"; mood = "Daytime"; scene = "Firenze_palazzo_daytime"; locationName = "Firenze";
-            playerX = -90.0f; playerY = 1.0f; playerZ = 10.0f; playerRot = 0f;
+            // Safe open piazza coordinates in front of Palazzo Vecchio (not inside townhouse geometry!)
+            playerX = 0.0f; playerY = 0.5f; playerZ = -6.0f; playerRot = 0f;
             targetCount = 2;
             objectiveNeutral = 2068; // Protect Leonardo and Escort him to safety.
             targetIds = new long[] { 101L, 102L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Borgia_Watcher_Leader", 101L, "ntt_bd49bc5f", -90.0f, 1.0f, 25.0f, 180f, true),
-                ("Borgia_Watcher_Left", 102L, "ntt_ed443896", -86.0f, 1.0f, 30.0f, 180f, true),
-                ("Leonardo_da_Vinci", 106L, "ntt_44fd8a65", -88.0f, 1.0f, 14.0f, 90f, false),
-                ("Enemy_Militia_01", 104L, "ntt_0c585da4", -94.0f, 1.0f, 30.0f, 180f, true),
-                ("Enemy_Brute_01", 105L, "ntt_6d68817b", -85.0f, 1.0f, 20.0f, 180f, true),
-                ("Special_Courtesan_01", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -85.0f, 1.0f, 12.0f, -90f, false),
-                ("Special_Doctor_01", 108L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -95.0f, 1.0f, 12.0f, 90f, false)
+                ("Borgia_Watcher_Leader", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 6.0f, 180f, true),
+                ("Borgia_Watcher_Left", 102L, "ntt_ed443896", -4.0f, 0.5f, 10.0f, 180f, true),
+                ("Leonardo_da_Vinci", 106L, "ntt_44fd8a65", 2.0f, 0.5f, -2.0f, 90f, false),
+                ("Enemy_Militia_01", 104L, "ntt_0c585da4", 4.0f, 0.5f, 10.0f, 180f, true),
+                ("Enemy_Brute_01", 105L, "ntt_6d68817b", 0.0f, 0.5f, 14.0f, 180f, true),
+                ("Special_Courtesan_01", 107L, "f2ca13ef-9d66-49c2-8734-eecd97f595a4", -5.0f, 0.5f, 0.0f, -90f, false),
+                ("Special_Doctor_01", 108L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", 5.0f, 0.5f, 0.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_04" || lower.Contains("requiem") || lower.Contains("coloseum_01"))
@@ -1074,17 +1076,17 @@ internal static class Program
         {
             // Mission 7: Burning Pages (Firenze Palazzo - Daytime) - The Bookkeeper
             region = "Firenze_Palazzo"; mood = "Daytime"; scene = "Firenze_palazzo_daytime"; locationName = "Firenze";
-            playerX = -85.0f; playerY = 1.0f; playerZ = 15.0f; playerRot = 0f;
+            playerX = -6.0f; playerY = 0.5f; playerZ = -6.0f; playerRot = 0f;
             targetCount = 1;
             objectiveNeutral = 2086; // Scout the area in order to identify the Bookkeeper.
             targetIds = new long[] { 101L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("The_Bookkeeper", 101L, "ntt_bd49bc5f", -85.0f, 1.0f, 32.0f, 180f, true),
-                ("Arsonist_Guard_01", 102L, "ntt_0c585da4", -80.0f, 1.0f, 38.0f, 180f, true),
-                ("Arsonist_Guard_02", 103L, "ntt_0c585da4", -90.0f, 1.0f, 38.0f, 180f, true),
-                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -92.0f, 1.0f, 20.0f, 90f, false),
-                ("Library_Scholar_01", 107L, "ntt_44fd8a65", -88.0f, 1.0f, 18.0f, 90f, false)
+                ("The_Bookkeeper", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 8.0f, 180f, true),
+                ("Arsonist_Guard_01", 102L, "ntt_0c585da4", -4.0f, 0.5f, 12.0f, 180f, true),
+                ("Arsonist_Guard_02", 103L, "ntt_0c585da4", 4.0f, 0.5f, 12.0f, 180f, true),
+                ("Special_Doctor_01", 106L, "8047c14a-4ff1-4963-83a5-e900baa60dd5", -6.0f, 0.5f, 0.0f, 90f, false),
+                ("Library_Scholar_01", 107L, "ntt_44fd8a65", 6.0f, 0.5f, 0.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_08" || lower.Contains("red_sun") || lower.Contains("redsun"))
@@ -1108,16 +1110,16 @@ internal static class Program
         {
             // Mission 9: A Dangerous Trade (Firenze Palazzo - Nighttime)
             region = "Firenze_Palazzo"; mood = "Nighttime"; scene = "Firenze_palazzo_nighttime"; locationName = "Firenze";
-            playerX = -92.0f; playerY = 1.0f; playerZ = 12.0f; playerRot = 0f;
+            playerX = 6.0f; playerY = 0.5f; playerZ = -6.0f; playerRot = 0f;
             targetCount = 2;
             objectiveNeutral = 4543; // DELIVER the letter to Sirus
             targetIds = new long[] { 101L, 102L };
             npcs = new (string, long, string, float, float, float, float, bool)[]
             {
-                ("Crow_Messenger", 101L, "ntt_bd49bc5f", -92.0f, 1.0f, 28.0f, 180f, true),
-                ("Templar_Agent_Receiver", 102L, "ntt_6d68817b", -88.0f, 1.0f, 32.0f, 180f, true),
-                ("Arms_Dealer_Guard", 103L, "ntt_ed443896", -96.0f, 1.0f, 32.0f, 180f, true),
-                ("Civilian_Male_01", 107L, "ntt_44fd8a65", -92.0f, 1.0f, 16.0f, 90f, false)
+                ("Crow_Messenger", 101L, "ntt_bd49bc5f", 0.0f, 0.5f, 8.0f, 180f, true),
+                ("Templar_Agent_Receiver", 102L, "ntt_6d68817b", -4.0f, 0.5f, 12.0f, 180f, true),
+                ("Arms_Dealer_Guard", 103L, "ntt_ed443896", 4.0f, 0.5f, 12.0f, 180f, true),
+                ("Civilian_Male_01", 107L, "ntt_44fd8a65", 0.0f, 0.5f, -2.0f, 90f, false)
             };
         }
         else if (lower == "story_crows_10" || lower.Contains("saviors_of_roma") || lower.Contains("saviors"))
@@ -1212,6 +1214,31 @@ internal static class Program
         object file = AssembleMissionFile(missionId, era, region, mood, scene, locationName, playerX, playerY, playerZ, playerRot, targetIds, npcs, objectiveNeutral, objectiveKind, targetCount);
         object goals = CreateMissionGoals(targetCount, objectiveNeutral, goalType);
         return (file, goals);
+    }
+
+    private static void ResetProfileToFresh()
+    {
+        object inventory = Get(_profile, "entitlementInventory");
+        if (inventory == null) return;
+        Type entryType = Nested("EntitlementInventory", "Entry");
+        var freshList = new List<object>();
+        foreach (string ent in ProfileEntitlements)
+        {
+            object newEntry = Activator.CreateInstance(entryType);
+            Set(newEntry, "gameIdGuid", ent);
+            Set(newEntry, "unlockDate", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            freshList.Add(newEntry);
+        }
+        object c1Entry = Activator.CreateInstance(entryType);
+        Set(c1Entry, "gameIdGuid", "ntt_c350c141"); // Campaign 1: Animus VR Training
+        Set(c1Entry, "unlockDate", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        freshList.Add(c1Entry);
+
+        Array updated = Array.CreateInstance(entryType, freshList.Count);
+        for (int i = 0; i < freshList.Count; i++) updated.SetValue(freshList[i], i);
+        Set(inventory, "entries", updated);
+        Set(_profile, "level", 26);
+        Set(_profile, "id", "acid-offline-unlocked");
     }
 
     private static void AddEntitlement(string guid)
@@ -1613,16 +1640,8 @@ internal static class Program
                 Set(info, "objectiveBaseType", Enum.Parse(TypeOf("AcierProtocol.EObjectiveType"), mDef.objType));
                 Set(info, "missionKind", Enum.Parse(TypeOf("AcierProtocol.EMissionKind"), mDef.kind));
 
-                // Mission 0 in each campaign is unlocked initially; subsequent missions require previous mission reward entitlement!
-                if (m == 0)
-                {
-                    Set(info, "reqEntitlements", none);
-                }
-                else
-                {
-                    string prevReq = $"ntt_story_reward_{cDef.missions[m - 1].baseName}";
-                    Set(info, "reqEntitlements", new string[] { prevReq });
-                }
+                // All story missions unlocked for offline play so user can freely play any story mission
+                Set(info, "reqEntitlements", none);
                 Set(info, "sortIndex", m);
                 Set(info, "rank", 1);
                 Set(info, "difficulty", m + 1);
@@ -1692,10 +1711,8 @@ internal static class Program
         }
         Set(tutorial, "categories", categories);
         GrantEntitlements();
-        // The user already completed mission 1 (story_0015): grant the reward entitlement so Mission 1 is marked completed and Mission 2 (story_0016) is unlocked!
-        AddEntitlement("ntt_story_reward_story_0015");
-        AddEntitlement("ntt_story_challenge_story_0015");
         GrantCurrency();
+        GrantAssassin();
         GrantAssassin();
         GrantMissionCollection();
         object inventory = Get(_profile, "Inventory");
@@ -1977,9 +1994,43 @@ internal static class Program
         Set(vReq, "checkVersionRequest", New("AcierProtocol.CheckVersionRequest"));
         SaveBin("checkVersion.bin", BuildResponse(vReq, "checkVersionRequest"));
 
+        // 1A. Export FRESH Profile (Story Mode - Only Tutorial 1 Unlocked)
+        ResetProfileToFresh();
+        object aReqFresh = New("AcierProtocol.Request");
+        Set(aReqFresh, "authAccountRequest", New("AcierProtocol.AuthAccountRequest"));
+        SaveBin("auth_fresh.bin", BuildResponse(aReqFresh, "authAccountRequest"));
+
+        object eReqFresh = New("AcierProtocol.Request");
+        Set(eReqFresh, "endMissionRequest", New("AcierProtocol.EndMissionRequest"));
+        SaveBin("endMission_fresh.bin", BuildResponse(eReqFresh, "endMissionRequest"));
+
+        // 1B. Export UNLOCKED Profile (All Campaigns & All Missions Unlocked)
+        AddEntitlement("ntt_5572b4db"); // A Murder of Crows
+        AddEntitlement("ntt_0dd81737"); // Forli - A Crimson Sunset
+        AddEntitlement("ntt_bfc7ed30"); // Completed Campaign Italy 01
+        AddEntitlement("ntt_offline_rank1"); // Heroic Rank 1
+        string[] allStoryMissions = new string[]
+        {
+            "story_tutorial_01", "story_tutorial_02", "story_tutorial_03",
+            "story_tutorial_04", "story_tutorial_05", "story_tutorial_06", "story_tutorial_07",
+            "story_crows_01", "story_crows_02", "story_crows_03", "story_crows_04", "story_crows_05",
+            "story_crows_06", "story_crows_07", "story_crows_08", "story_crows_09", "story_crows_10",
+            "story_forli_01", "story_forli_02", "story_forli_03", "story_forli_04",
+            "story_0015", "story_0016", "story_0017"
+        };
+        foreach (var sm in allStoryMissions)
+        {
+            AddEntitlement($"ntt_story_reward_{sm}");
+            AddEntitlement($"ntt_story_challenge_{sm}");
+        }
+
+        Set(_profile, "id", "acid-offline-unlocked");
+        Set(_profile, "level", 26);
         object aReq = New("AcierProtocol.Request");
         Set(aReq, "authAccountRequest", New("AcierProtocol.AuthAccountRequest"));
-        SaveBin("auth.bin", BuildResponse(aReq, "authAccountRequest"));
+        object authUnlocked = BuildResponse(aReq, "authAccountRequest");
+        SaveBin("auth_unlocked.bin", authUnlocked);
+        SaveBin("auth.bin", authUnlocked);
 
         object sReq = New("AcierProtocol.Request");
         Set(sReq, "getStaticsRequest", New("AcierProtocol.GetStaticsRequest"));
@@ -1995,7 +2046,9 @@ internal static class Program
 
         object eReq = New("AcierProtocol.Request");
         Set(eReq, "endMissionRequest", New("AcierProtocol.EndMissionRequest"));
-        SaveBin("endMission.bin", BuildResponse(eReq, "endMissionRequest"));
+        object endUnlocked = BuildResponse(eReq, "endMissionRequest");
+        SaveBin("endMission_unlocked.bin", endUnlocked);
+        SaveBin("endMission.bin", endUnlocked);
 
         // 2. Missions
         string[] missions = new string[]
@@ -2024,6 +2077,14 @@ internal static class Program
             Set(openReqObj, "missionId", actualMid);
             Set(mOpenReq, "openMissionRequest", openReqObj);
             SaveBin($"openMission_{m}.bin", BuildResponse(mOpenReq, "openMissionRequest"));
+
+            // EndMission (won = true)
+            object mEndReq = New("AcierProtocol.Request");
+            object endReqObj = New("AcierProtocol.EndMissionRequest");
+            Set(endReqObj, "won", true);
+            Set(mEndReq, "endMissionRequest", endReqObj);
+            _activeMissionId = actualMid;
+            SaveBin($"endMission_{m}.bin", BuildResponse(mEndReq, "endMissionRequest"));
         }
 
         // 3. Catalogue JSON

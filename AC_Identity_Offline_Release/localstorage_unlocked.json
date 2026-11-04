@@ -1,0 +1,279 @@
+{
+  "version": 7,
+  "codex": {
+    "-2102446090": true,
+    "-2073701302": true
+  },
+  "items": {},
+  "decryption": {},
+  "modules": {},
+  "achievements": {},
+  "generalpurpose": {
+    "AssetBundlesQuality": "Low",
+    "level_up": {
+      "old": "5",
+      "new": "6",
+      "seen": "false"
+    }
+  },
+  "shop": {},
+  "cta": {
+    "missions": [
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": false,
+        "LowHealth": false
+      },
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": false,
+        "LowHealth": false
+      },
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": false,
+        "LowHealth": false
+      },
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": false,
+        "LowHealth": false
+      },
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": true,
+        "LowHealth": false
+      },
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": false,
+        "LowHealth": false
+      },
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": false,
+        "LowHealth": false
+      },
+      {
+        "Died": 0,
+        "UsedDoctor": false,
+        "UsedSkill": false,
+        "LowDamage": false,
+        "LowHealth": false
+      }
+    ],
+    "counter": {
+      "Mission": 8,
+      "ExceedingRankCurrent": 0,
+      "ExceedingRankNextAvail": 8,
+      "LastLeaderboardShown": 1793735339,
+      "MissionCTADefinitionUnlockLeaderboard": 1,
+      "MissionLastCTA": 1
+    }
+  },
+  "missionprogress": {
+    "story_tutorial_01": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_tutorial_02": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_01": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_02": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_tutorial_03": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_tutorial_04": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_tutorial_05": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_tutorial_06": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_tutorial_07": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_forli_01": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_03": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_forli_02": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_forli_03": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_forli_04": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_04": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_05": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_06": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_07": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_08": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_09": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_crows_10": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_0015": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_0016": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    },
+    "story_0017": {
+      "WasCompletedShown": true,
+      "WasUnlockShown": true
+    }
+  },
+  "entitlement": {
+    "ntt_b76f57c1": true,
+    "ntt_7392aea9": true,
+    "ntt_87a7298a": true,
+    "ntt_fde08cf7": true,
+    "ntt_daa20406": true,
+    "ntt_5bf19ee0": true,
+    "ntt_7558c49b": true,
+    "ntt_9d39e06b": true,
+    "ntt_b8a0d37a": true,
+    "ntt_e26dbe51": true,
+    "ntt_82f04a94": true,
+    "ntt_6d0f5b96": true,
+    "ntt_1600f228": true,
+    "ntt_6d0c3cd8": true,
+    "ntt_6259b445": true,
+    "ntt_c7f34488": true,
+    "ntt_9a6abbfe": true,
+    "ntt_f272ec1b": true,
+    "ntt_e7772d93": true,
+    "ntt_79558add": true,
+    "ntt_04d2fa6f": true,
+    "ntt_8650c665": true,
+    "ntt_9412f34d": true,
+    "ntt_cf5a1228": true,
+    "ntt_f73b0a1b": true,
+    "ntt_4db01d88": true,
+    "ntt_bc427202": true,
+    "ntt_de7f3cd7": true,
+    "ntt_27b8e39d": true,
+    "ntt_fcca8eae": true,
+    "ntt_8151d3ac": true,
+    "ntt_dd54e90f": true,
+    "ntt_b05b0231": true,
+    "ntt_01ba0a9f": true,
+    "ntt_933dcc14": true,
+    "ntt_32a9f9b0": true,
+    "ntt_1cbb2640": true,
+    "ntt_329b219e": true,
+    "ntt_bfc7ed30": true,
+    "ntt_offline_rank0": true,
+    "ntt_story_reward_story_0015": true,
+    "ntt_story_challenge_story_0015": true,
+    "ntt_story_reward_story_tutorial_01": true,
+    "ntt_story_challenge_story_tutorial_01": true,
+    "ntt_story_reward_story_tutorial_02": true,
+    "ntt_story_challenge_story_tutorial_02": true,
+    "ntt_story_reward_story_crows_01": true,
+    "ntt_story_challenge_story_crows_01": true,
+    "ntt_story_reward_story_crows_02": true,
+    "ntt_story_challenge_story_crows_02": true,
+    "ntt_story_reward_story_tutorial_03": true,
+    "ntt_story_challenge_story_tutorial_03": true,
+    "ntt_story_reward_story_tutorial_04": true,
+    "ntt_story_challenge_story_tutorial_04": true,
+    "ntt_story_reward_story_tutorial_05": true,
+    "ntt_story_challenge_story_tutorial_05": true,
+    "ntt_story_reward_story_tutorial_06": true,
+    "ntt_story_challenge_story_tutorial_06": true,
+    "ntt_story_reward_story_tutorial_07": true,
+    "ntt_story_challenge_story_tutorial_07": true,
+    "ntt_story_reward_story_crows_03": true,
+    "ntt_story_challenge_story_crows_03": true,
+    "ntt_story_reward_story_crows_04": true,
+    "ntt_story_challenge_story_crows_04": true,
+    "ntt_story_reward_story_crows_05": true,
+    "ntt_story_challenge_story_crows_05": true,
+    "ntt_story_reward_story_crows_06": true,
+    "ntt_story_challenge_story_crows_06": true,
+    "ntt_story_reward_story_crows_07": true,
+    "ntt_story_challenge_story_crows_07": true,
+    "ntt_story_reward_story_crows_08": true,
+    "ntt_story_challenge_story_crows_08": true,
+    "ntt_story_reward_story_crows_09": true,
+    "ntt_story_challenge_story_crows_09": true,
+    "ntt_story_reward_story_crows_10": true,
+    "ntt_story_challenge_story_crows_10": true,
+    "ntt_story_reward_story_forli_01": true,
+    "ntt_story_challenge_story_forli_01": true,
+    "ntt_story_reward_story_forli_02": true,
+    "ntt_story_challenge_story_forli_02": true,
+    "ntt_story_reward_story_forli_03": true,
+    "ntt_story_challenge_story_forli_03": true,
+    "ntt_story_reward_story_forli_04": true,
+    "ntt_story_challenge_story_forli_04": true,
+    "ntt_story_reward_story_0016": true,
+    "ntt_story_challenge_story_0016": true,
+    "ntt_story_reward_story_0017": true,
+    "ntt_story_challenge_story_0017": true,
+    "ntt_c350c141": true,
+    "ntt_5572b4db": true,
+    "ntt_0dd81737": true
+  }
+}

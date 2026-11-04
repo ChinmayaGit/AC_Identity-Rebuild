@@ -8,7 +8,7 @@
     "net10.0": []
   },
   "packageFolders": {
-    "/var/folders/w2/lpqdmmhx3fs_vhmty3pfj5bw0000gn/T/cursor-sandbox-cache/a5a50dc76112c8adfbbaa3f564f19908/nuget": {}
+    "/Users/chinmaya/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
@@ -16,7 +16,7 @@
       "projectUniqueName": "/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/AcierOfflineServer.csproj",
       "projectName": "AcierOfflineServer",
       "projectPath": "/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/AcierOfflineServer.csproj",
-      "packagesPath": "/var/folders/w2/lpqdmmhx3fs_vhmty3pfj5bw0000gn/T/cursor-sandbox-cache/a5a50dc76112c8adfbbaa3f564f19908/nuget",
+      "packagesPath": "/Users/chinmaya/.nuget/packages/",
       "outputPath": "/Users/chinmaya/Documents/Projects/Own/AC Identity/offline/AcierOfflineServer/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
