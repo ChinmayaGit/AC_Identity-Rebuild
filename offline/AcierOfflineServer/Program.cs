@@ -242,14 +242,7 @@ internal static class Program
                 break;
             case "endMissionRequest":
                 object ended = New("AcierProtocol.EndMissionResponse");
-                object endReward = New("AcierProtocol.MissionReward");
-                Set(endReward, "baseSc", 500L);
-                Set(endReward, "finalSc", 500L);
-                Set(endReward, "baseXp", 1000L);
-                Set(endReward, "finalXp", 1000L);
-                Set(endReward, "scWithoutChallenge", 500L);
-                Set(endReward, "xpWithoutChallenge", 1000L);
-                Set(endReward, "scFromHireling", 50L);
+                object endReward = MissionReward(500L, 1000L);
                 Set(ended, "missionReward", endReward);
                 Set(response, "endMissionResponse", ended);
 
@@ -289,14 +282,7 @@ internal static class Program
                 if (gmiRankObj != null) gmiRank = (int)gmiRankObj;
                 Console.WriteLine($"getMissionInfoRequest: missionId={gmiMid}, rank={gmiRank}");
 
-                object reward = New("AcierProtocol.MissionReward");
-                Set(reward, "baseSc", 500L);
-                Set(reward, "finalSc", 500L);
-                Set(reward, "baseXp", 1000L);
-                Set(reward, "finalXp", 1000L);
-                Set(reward, "scWithoutChallenge", 500L);
-                Set(reward, "scFromHireling", 50L);
-                Set(missionInfo, "missionRewardPreview", reward);
+                Set(missionInfo, "missionRewardPreview", MissionReward(500L, 1000L));
                 var (_, gmiGoals) = BuildMissionFileAndGoals(gmiMid, gmiRank);
                 Set(missionInfo, "missionGoals", gmiGoals);
                 Set(response, "getMissionInfoResponse", missionInfo);
@@ -1374,6 +1360,26 @@ internal static class Program
         }
     }
 
+    // The debrief reads challengeLoots and resources immediately. A null list
+    // throws while the Animus sync overlay is up, so the mission never ends
+    // and the next one stays locked.
+    private static object MissionReward(long sc, long xp)
+    {
+        object reward = New("AcierProtocol.MissionReward");
+        Set(reward, "baseSc", sc);
+        Set(reward, "finalSc", sc);
+        Set(reward, "baseXp", xp);
+        Set(reward, "finalXp", xp);
+        Set(reward, "scWithoutChallenge", sc);
+        Set(reward, "xpWithoutChallenge", xp);
+        Set(reward, "scFromHireling", 50L);
+        Set(reward, "elements", Array.CreateInstance(TypeOf("AcierProtocol.InventoryElement"), 0));
+        Set(reward, "resources", Array.CreateInstance(TypeOf("AcierProtocol.ResourceFromTemplate"), 0));
+        Set(reward, "challengeLoots", Array.CreateInstance(TypeOf("AcierProtocol.MissionGoalLoot"), 0));
+        Set(reward, "entitlements", Array.Empty<string>());
+        return reward;
+    }
+
     private static object ObjectiveResult(string result, string tracker)
     {
         object value = New("AcierProtocol.ObjectiveResult");
@@ -2077,6 +2083,12 @@ internal static class Program
         int c1Neutral = (int)Get(c1Desc, "neutral");
         Console.WriteLine($"SelfTest story_crows_01 Goal Loca: {c1Neutral} (Expected: 2066)");
         if (c1Neutral != 2066) throw new InvalidOperationException("Goal neutral mismatch!");
+        object endRequest = New("AcierProtocol.Request");
+        Set(endRequest, "endMissionRequest", New("AcierProtocol.EndMissionRequest"));
+        object endResponse = BuildResponse(endRequest, "endMissionRequest");
+        object checkedReward = Get(Get(endResponse, "endMissionResponse"), "missionReward");
+        if (Get(checkedReward, "challengeLoots") == null || Get(checkedReward, "resources") == null || Get(checkedReward, "elements") == null)
+            throw new InvalidOperationException("mission reward lists are null");
         if (!Catalogue.ContainsKey("FirstContact_Android.xml")) throw new InvalidOperationException("catalogue missing FirstContact");
         if (!Catalogue.ContainsKey("GameDB_AndroidETC2.bin")) throw new InvalidOperationException("catalogue missing GameDB");
         object request = New("AcierProtocol.Request");
