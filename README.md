@@ -123,26 +123,37 @@ To avoid home screen confusion with the main game app (which features the red ho
 ### 80/20 Server Status & Instant Toggle
 - The top header provides an 80% width status card displaying live server health (`SERVER RUNNING` / `http://127.0.0.1:8080`).
 - The 20% right corner features an instant toggle switch to start or halt the offline server with one tap.
+- **True Background Termination**: When toggled OFF, the app cleanly halts the Android Foreground Service, releases wake locks, terminates the silent audio playback engine, and removes the persistent system notification. When toggled ON, the background service and server listener restart immediately.
 
 ### Direct Game Launcher
-- Tapping **"Launch Game"** executes an explicit Android activity launcher intent (`Intent.ACTION_MAIN`, `Intent.CATEGORY_LAUNCHER`, `FLAG_ACTIVITY_NEW_TASK or FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`) targeting `com.acid.plugins.activity.BridgeActivity`, launching the game reliably without returning to the home screen.
+- Tapping **"Launch Game"** executes an explicit Android activity launcher intent (`packageManager.getLaunchIntentForPackage` and `BridgeActivity` with `FLAG_ACTIVITY_NEW_TASK or FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`), launching the game reliably without returning to the home screen.
 
 ### Game Access & Dynamic Mission Progression Manager
 Accessible via the **"Missions & Unlocks"** button:
-- **Dynamic Protobuf Auth Filtering**: Solves the previous issue where pre-baked `auth.bin` responses overrode player saves. The server now dynamically compiles and serves user entitlements in real time.
+- **Dynamic Protobuf Auth Filtering**: The server dynamically compiles and serves user entitlements in real time.
 - **Story Progression Mode (Natural Unlocks)**:
-  - Tapping **"Reset All"** resets all story progress so that only *VR Training: Movement & Eagle Vision* (`story_tutorial_01`) is available.
-  - Future missions are strictly locked until earlier missions are completed.
+  - Tapping **"Reset All"** resets story progress so that only *VR Training: Movement & Eagle Vision* (`story_tutorial_01`) is available.
+  - Future missions remain locked until earlier missions are completed.
   - As you finish missions in-game, the Companion Server automatically captures `EndMissionRequest`, grants completion rewards, unlocks the next mission, and advances campaigns.
 - **Sandbox Mode (Unlock All)**:
-  - Tapping **"Unlock All"** grants all story reward entitlements and unlocks all 24 missions across all 3 campaigns (*Montreal VR Training*, *Italy - A Murder of Crows*, *Forlì - A Crimson Sunset*, and *Bonus Contracts*).
+  - Tapping **"Unlock All"** grants all story reward entitlements and unlocks all 24 missions across all campaigns (*Montreal VR Training*, *Italy - A Murder of Crows*, *Forlì - A Crimson Sunset*, and *Bonus Contracts*).
 - **Manual Granular Control**:
   - Individually toggle any mission's **Unlocked** or **Completed** state.
-  - The server dynamically filters `auth.bin` to match your custom selection instantly.
 
-### Custom Mission Creator & Uploader
-- Tap **"Upload"** in the Level Manager to create or import custom missions.
-- Specify Mission ID, title, target region (*Firenze Palazzo*, *Santa Croce*, *Roma Colosseo*, *Monteriggioni*, *Forlì*), time of day (*Daytime*, *Nighttime*, *Dusk*, *Foggy*, *Sunny*), and primary objectives.
+### Download Skill & AI Mission Guide (Direct On-Device)
+- In the **Missions & Unlocks** screen, tap the **Download Skill & AI Guide** icon (`↓` in the top AppBar).
+- Exports the autonomous mission generation assets directly into your phone's public storage:
+  - `/sdcard/Download/ACIdentity_Mission_Skill/SKILL.md`
+  - `/sdcard/Download/ACIdentity_Mission_Skill/CUSTOM_MISSION_SPEC.md`
+  - `/sdcard/Download/ACIdentity_Mission_Skill/sample_mission.json`
+- Displays step-by-step instructions and a **"Copy AI Prompt to Clipboard"** button. Paste the prompt directly into ChatGPT, Claude, Gemini, or any coding agent to instantly generate custom missions!
+
+### Custom Mission Creator & File Uploader
+- In the **Missions & Unlocks** screen, tap the **Upload / Pick File** icon (`↑` in the top AppBar).
+- **Pick File from Device**: Tap **"Pick Mission File (.json or .bin)"** to browse your device files (e.g. from `/sdcard/Download/`).
+  - **JSON files**: Automatically parsed, extracting title, region, atmosphere, player spawn, and objectives, registering the custom mission and unlocking it immediately.
+  - **Compiled Binary files (`openMission_<mid>.bin`)**: Stored into `custom_missions/`, immediately unlocking the mission in your game state.
+- **Manual Entry**: Or fill out the built-in form (Mission ID, Title, Region, Mood, Objective) and tap **Save & Register**.
 
 ---
 
@@ -169,6 +180,41 @@ Accessible via the **"Missions & Unlocks"** button:
 
 ## Custom Missions & Level Creation
 
-To create custom missions using AI agents or manual scripting, refer to the dedicated agent skill documentation:
-- **Guide**: [`skills/ac-identity-mission-creator/SKILL.md`](file:///Users/chinmaya/Documents/Projects/Own/AC%20Identity/skills/ac-identity-mission-creator/SKILL.md)
-- **Mission Specification**: [`skills/ac-identity-mission-creator/CUSTOM_MISSION_SPEC.md`](file:///Users/chinmaya/Documents/Projects/Own/AC%20Identity/skills/ac-identity-mission-creator/CUSTOM_MISSION_SPEC.md)
+### 1. The 4-Tab Server Companion Interface
+The **AC Identity Server** app now features a 4-tab mission management interface:
+- **Campaign**: Official story progression (Montreal VR, Italy, Forlì, Contracts) with individual and bulk unlock/reset switches.
+- **Custom: Mission**: Dedicated hub for all user-created and AI-generated missions. Uploaded missions appear here by default with `ACTIVE IN GAME` badges, instant activation, and deletion controls.
+- **Upload**: Minimal, clean upload screen featuring only `Mission ID:`, `Mission Title:`, and `Upload File` button.
+- **Guide & Assets**: Comprehensive encyclopedia of game assets and interactive AI prompt guide with direct buttons to **Download Package** (saved to Downloads folder) and **Share / Open Package**.
+
+### 2. Dual-Slot In-Game Playability (Contracts & Italy)
+Custom missions are automatically compiled into Google Protobuf binaries on-device and mapped to two slots simultaneously:
+1. **Contracts (`story_0015`)**: Tap **Contracts** in the game's main menu.
+2. **Italy — A Murder of Crows (`story_crows_01`)**: Tap **Italy** on the Animus map and enter Mission 1.
+Your custom mission loads and plays immediately in either location!
+
+### 3. Creating Missions with AI (ChatGPT, Claude, Gemini)
+1. In the **Guide & Assets** tab of the server app (or from this repository), tap **Download Package** to get:
+   - `SKILL.md`: The autonomous mission creator agent skill.
+   - `INSTRUCTIONS.md`: Progressive interview protocol guiding the AI step-by-step.
+   - `AC_IDENTITY_ASSETS_GUIDE.pdf`: 3-page printable encyclopedia of all historical maps, characters, animals, props, and rooftop tailing mechanics.
+   - `sample_mission.json`: Working template.
+2. Upload `SKILL.md` and `INSTRUCTIONS.md` to your AI chat.
+3. The AI will interview you step-by-step:
+   - **Slot**: Contracts, Italy, or Both.
+   - **Location**: Firenze Palazzo, Firenze Santa Croce, Roma Colosseo, Monteriggioni, or Forlì.
+   - **Mood / Time**: Daytime, Nighttime, Dusk, or Foggy.
+   - **Objective**:
+     - *Assassinate / Eliminate*: Borgia Captains, Templars, Spies.
+     - *Protect / Escort*: King, Duke, Maid, Courtesan, Courier.
+     - *Tail / Follow / Spy*: Rooftop and street pursuit (maintaining 15m–40m distance, leaping beams, stealth blending, or silently assassinating alerted guards before alarms sound).
+   - **Cast & Characters**: Nobles, Kings, Maids, Crossbowmen, Brutes, Agile Scouts.
+4. The AI outputs a verified, collision-safe `mission.json`.
+5. In the Companion App -> **Upload** tab -> select your file -> Play in AC Identity!
+
+### 4. Compiling via CLI
+You can also compile custom missions to binary `.bin` files on your computer using `AcierOfflineServer`:
+```bash
+dotnet run --project offline/AcierOfflineServer -- --build-mission <path_to_mission.json> <output_dir>
+```
+This produces `openMission_<mid>.bin`, `getMissionInfo_<mid>.bin`, and `endMission_<mid>.bin` which can be uploaded directly to the companion server or placed into `/sdcard/ACIdentity/custom_missions/`.

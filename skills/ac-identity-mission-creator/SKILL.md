@@ -133,11 +133,10 @@ Select the mission and tap **Explore → Start** to enter your custom mission!
 
 ## In-App Mission Creator / Uploader
 
-The Companion Server app provides a built-in UI for uploading missions:
+The Companion Server app provides a built-in UI for uploading and managing custom missions:
 1. Open **AC Identity Server**.
-2. Tap **Game Access & Level Manager**.
-3. Tap **+ Upload**.
-4. Enter the Mission ID, Title, Location, Atmosphere/Mood, and Primary Objective.
-5. Tap **Save & Register** followed by **Save & Apply to Game**.
-6. Tap **Open Assassin's Creed Identity** to play immediately.
+2. Tap **Missions & Unlocks**.
+3. Tap the **Download Skill & AI Guide** icon (`↓`) in the top app bar to export the AI skill bundle directly to your phone's `/sdcard/Download/ACIdentity_Mission_Skill/` folder and copy ready-made AI prompts.
+4. Tap the **Upload / Pick File** icon (`↑`) to browse and pick any `.json` or `.bin` mission file directly from your device storage, or enter custom mission parameters manually.
+5. Tap **Open Assassin's Creed Identity** to launch the game and play your custom mission!
 

@@ -125,6 +125,17 @@ class CompanionForegroundService : Service() {
         wakeLock?.let {
             if (it.isHeld) it.release()
         }
+        wakeLock = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        try {
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.cancel(1337)
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 

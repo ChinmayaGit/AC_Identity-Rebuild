@@ -4,7 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show MethodChannel, rootBundle;
+import 'package:flutter/services.dart'
+    show MethodChannel, rootBundle, Clipboard, ClipboardData;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +38,8 @@ class MissionMeta {
   final String title;
   final String location;
   final String objective;
+  final bool isCustom;
+  final String targetSlot;
 
   const MissionMeta({
     required this.id,
@@ -44,7 +47,370 @@ class MissionMeta {
     required this.title,
     required this.location,
     required this.objective,
+    this.isCustom = false,
+    this.targetSlot = 'story_0015',
   });
+}
+
+class PbWriter {
+  final BytesBuilder _b = BytesBuilder();
+
+  void writeVarint(int field, int value) {
+    _writeTag(field, 0);
+    _writeVarintValue(value);
+  }
+
+  void _writeTag(int field, int wire) {
+    _writeVarintValue((field << 3) | wire);
+  }
+
+  void _writeVarintValue(int value) {
+    if (value < 0) {
+      if (value == -2) {
+        _b.add(const [
+          0xFE,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0x01,
+        ]);
+        return;
+      }
+      if (value == -1) {
+        _b.add(const [
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0xFF,
+          0x01,
+        ]);
+        return;
+      }
+      int v = value;
+      for (int i = 0; i < 9; i++) {
+        _b.addByte((v & 0x7F) | 0x80);
+        v >>= 7;
+      }
+      _b.addByte(1);
+      return;
+    }
+    int v = value;
+    while (v >= 0x80) {
+      _b.addByte((v & 0x7F) | 0x80);
+      v >>= 7;
+    }
+    _b.addByte(v & 0x7F);
+  }
+
+  void writeFloat(int field, double value) {
+    _writeTag(field, 5);
+    final bd = ByteData(4)..setFloat32(0, value, Endian.little);
+    _b.add(bd.buffer.asUint8List());
+  }
+
+  void writeString(int field, String value) {
+    writeBytes(field, utf8.encode(value));
+  }
+
+  void writeBytes(int field, List<int> bytes) {
+    _writeTag(field, 2);
+    _writeVarintValue(bytes.length);
+    _b.add(bytes);
+  }
+
+  void writeMsg(int field, PbWriter sub) {
+    writeBytes(field, sub.toBytes());
+  }
+
+  Uint8List toBytes() => _b.toBytes();
+}
+
+Uint8List buildCustomMissionBinary(Map<String, dynamic> json) {
+  final mid =
+      json['missionId'] as String? ??
+      json['id'] as String? ??
+      'custom_mission_01';
+  final regionStr = json['region'] as String? ?? 'Firenze_Palazzo';
+  final moodStr = json['mood'] as String? ?? 'Daytime';
+
+  double px = -6.0, py = 0.5, pz = -6.0;
+  if (json['playerSpawn'] is Map) {
+    final sp = json['playerSpawn'] as Map;
+    if (sp['x'] != null) px = (sp['x'] as num).toDouble();
+    if (sp['y'] != null) py = (sp['y'] as num).toDouble();
+    if (sp['z'] != null) pz = (sp['z'] as num).toDouble();
+  }
+
+  int regionVal = 2; // Firenze_Palazzo
+  String locName = 'Firenze';
+  String scene = 'Firenze_palazzo_daytime';
+  if (regionStr.contains('Roma')) {
+    regionVal = 3;
+    locName = 'Roma';
+    scene = 'Roma_coloseum_afternoon';
+  } else if (regionStr.contains('SantaCroce')) {
+    regionVal = 2;
+    locName = 'Firenze';
+    scene = 'Firenze_santacroce_sunny';
+  } else if (regionStr.contains('Monteriggioni')) {
+    regionVal = 1;
+    locName = 'Monteriggioni';
+    scene = 'MonteRiggioni_DayTime';
+  } else if (regionStr.contains('Forli')) {
+    regionVal = 4;
+    locName = 'Forli';
+    scene = 'Forli_dusk';
+  }
+
+  int moodVal = 1; // Daytime
+  if (moodStr == 'Nighttime') {
+    moodVal = 2;
+    scene = scene
+        .replaceAll('daytime', 'nighttime')
+        .replaceAll('DayTime', 'Nighttime');
+  } else if (moodStr == 'Dusk') {
+    moodVal = 3;
+  } else if (moodStr == 'Foggy') {
+    moodVal = 4;
+  } else if (moodStr == 'Sunny') {
+    moodVal = 5;
+  }
+
+  // Component 0: MissionRootContent
+  final rootContent = PbWriter()
+    ..writeVarint(5, 1)
+    ..writeVarint(6, 1)
+    ..writeString(8, mid)
+    ..writeVarint(11, 1)
+    ..writeVarint(12, regionVal)
+    ..writeString(13, locName)
+    ..writeVarint(15, moodVal)
+    ..writeString(16, scene)
+    ..writeVarint(19, 1)
+    ..writeMsg(20, PbWriter());
+
+  final comp0 = PbWriter()
+    ..writeMsg(6, rootContent)
+    ..writeVarint(1000, 6);
+
+  // Component 1: Hotspots
+  final comp1 = PbWriter()
+    ..writeMsg(4, PbWriter()..writeMsg(10, PbWriter()..writeVarint(9, 2)))
+    ..writeVarint(1000, 4);
+
+  // Targets
+  final targetsList = <Map<String, dynamic>>[];
+  if (json['targets'] is List && (json['targets'] as List).isNotEmpty) {
+    for (final t in json['targets']) {
+      if (t is Map<String, dynamic>) targetsList.add(t);
+    }
+  } else {
+    targetsList.add({
+      'name': 'Borgia_Infiltrator_01',
+      'guid': 'ntt_bd49bc5f',
+      'x': px + 8.0,
+      'y': py,
+      'z': pz + 18.0,
+      'rot': 180.0,
+    });
+  }
+
+  // Component 2: Kill Objective
+  final objBase = PbWriter()
+    ..writeString(4, '3430')
+    ..writeString(5, '3430')
+    ..writeVarint(6, -2)
+    ..writeVarint(7, -2)
+    ..writeVarint(10, 1)
+    ..writeVarint(13, 6)
+    ..writeMsg(
+      20,
+      PbWriter()
+        ..writeVarint(1, -2)
+        ..writeVarint(2, -2)
+        ..writeVarint(3, 2)
+        ..writeVarint(9, 3),
+    );
+
+  final targetContent = PbWriter()
+    ..writeVarint(9, 101)
+    ..writeMsg(10, objBase);
+
+  final killContent = PbWriter()
+    ..writeVarint(8, targetsList.length)
+    ..writeMsg(10, targetContent);
+
+  final comp2 = PbWriter()
+    ..writeMsg(30, killContent)
+    ..writeVarint(1000, 30);
+
+  // Component 3: Timer backup
+  final comp3 = PbWriter()
+    ..writeMsg(
+      42,
+      PbWriter()
+        ..writeMsg(
+          1,
+          PbWriter()
+            ..writeVarint(1, 1)
+            ..writeVarint(2, 1)
+            ..writeVarint(6, 1)
+            ..writeVarint(7, 1)
+            ..writeMsg(
+              20,
+              PbWriter()
+                ..writeVarint(1, -2)
+                ..writeVarint(2, -2)
+                ..writeVarint(9, 4),
+            ),
+        )
+        ..writeVarint(2, 86400)
+        ..writeMsg(3, PbWriter()..writeVarint(2, 4))
+        ..writeMsg(4, PbWriter()..writeVarint(2, 4))
+        ..writeMsg(5, PbWriter()..writeVarint(2, 4)),
+    )
+    ..writeVarint(1000, 42);
+
+  // Player Spawn node
+  final spawnNode = PbWriter()
+    ..writeMsg(
+      2,
+      PbWriter()
+        ..writeMsg(
+          5,
+          PbWriter()..writeMsg(
+            10,
+            PbWriter()
+              ..writeVarint(1, -2)
+              ..writeVarint(2, -2)
+              ..writeVarint(9, 1),
+          ),
+        )
+        ..writeVarint(1000, 5),
+    )
+    ..writeString(6, 'PlayerSpawn')
+    ..writeFloat(7, px)
+    ..writeFloat(8, py)
+    ..writeFloat(9, pz);
+
+  // Children: spawn + targets
+  final children = <PbWriter>[spawnNode];
+  int currentId = 101;
+  for (final t in targetsList) {
+    final name = t['name'] as String? ?? 'Target_$currentId';
+    final guid = t['guid'] as String? ?? 'ntt_bd49bc5f';
+    final x = (t['x'] as num?)?.toDouble() ?? (px + 6.0);
+    final y = (t['y'] as num?)?.toDouble() ?? py;
+    final z = (t['z'] as num?)?.toDouble() ?? (pz + 12.0);
+    final rot = (t['rot'] as num?)?.toDouble() ?? 180.0;
+
+    final npcNode = PbWriter()
+      ..writeMsg(
+        2,
+        PbWriter()
+          ..writeMsg(
+            12,
+            PbWriter()..writeMsg(
+              10,
+              PbWriter()
+                ..writeFloat(4, 5.0)
+                ..writeMsg(
+                  10,
+                  PbWriter()
+                    ..writeVarint(1, -2)
+                    ..writeVarint(2, -2)
+                    ..writeVarint(9, 1000 + currentId),
+                ),
+            ),
+          )
+          ..writeVarint(1000, 12),
+      )
+      ..writeMsg(
+        2,
+        PbWriter()
+          ..writeMsg(
+            13,
+            PbWriter()
+              ..writeString(9, guid)
+              ..writeMsg(
+                10,
+                PbWriter()
+                  ..writeFloat(7, 1.0)
+                  ..writeMsg(
+                    10,
+                    PbWriter()
+                      ..writeVarint(1, -2)
+                      ..writeVarint(2, -2)
+                      ..writeVarint(9, currentId),
+                  ),
+              ),
+          )
+          ..writeVarint(1000, 13),
+      )
+      ..writeFloat(4, rot)
+      ..writeString(6, name)
+      ..writeFloat(7, x)
+      ..writeFloat(8, y)
+      ..writeFloat(9, z);
+
+    children.add(npcNode);
+    currentId++;
+  }
+
+  // Root Node
+  final rootNode = PbWriter();
+  for (final ch in children) {
+    rootNode.writeMsg(1, ch);
+  }
+  rootNode
+    ..writeMsg(2, comp0)
+    ..writeMsg(2, comp1)
+    ..writeMsg(2, comp2)
+    ..writeMsg(2, comp3)
+    ..writeString(6, mid);
+
+  // Mission Goals
+  final goals = PbWriter()
+    ..writeMsg(
+      1,
+      PbWriter()
+        ..writeVarint(3, 3)
+        ..writeVarint(4, 1)
+        ..writeMsg(8, PbWriter()..writeVarint(1, 3430))
+        ..writeMsg(
+          9,
+          PbWriter()
+            ..writeString(2, '${targetsList.length}')
+            ..writeVarint(3, targetsList.length),
+        )
+        ..writeVarint(10, 3),
+    )
+    ..writeVarint(2, 1);
+
+  // Mission Token
+  final token = PbWriter()
+    ..writeString(1, 'offline-mission')
+    ..writeString(2, mid)
+    ..writeString(4, 'acid-offline-assassin')
+    ..writeString(6, 'hireling-1')
+    ..writeMsg(10, PbWriter()..writeMsg(2, rootNode))
+    ..writeMsg(11, goals);
+
+  // Response (Field 200 = openMissionResponse)
+  final openResp = PbWriter()..writeMsg(1, token);
+  final resp = PbWriter()..writeMsg(200, openResp);
+
+  return resp.toBytes();
 }
 
 const List<MissionMeta> kAllMissions = [
@@ -126,7 +492,8 @@ const List<MissionMeta> kAllMissions = [
     campaign: 'Italy - A Murder of Crows',
     title: 'A Smuggler’s Request',
     location: 'Firenze Palazzo - Daytime',
-    objective: 'Eliminate merchant guards and secure confiscated supply manifests.',
+    objective:
+        'Eliminate merchant guards and secure confiscated supply manifests.',
   ),
   MissionMeta(
     id: 'story_crows_05',
@@ -147,21 +514,24 @@ const List<MissionMeta> kAllMissions = [
     campaign: 'Italy - A Murder of Crows',
     title: 'In Plain Sight',
     location: 'Firenze Santa Croce - Sunny',
-    objective: 'Infiltrate the crowded market and dispatch the corrupt magistrate.',
+    objective:
+        'Infiltrate the crowded market and dispatch the corrupt magistrate.',
   ),
   MissionMeta(
     id: 'story_crows_08',
     campaign: 'Italy - A Murder of Crows',
     title: 'Blood on the Tiber',
     location: 'Roma Colosseo - Dusk',
-    objective: 'Track Borgia captains through the Roman ruins and silence them.',
+    objective:
+        'Track Borgia captains through the Roman ruins and silence them.',
   ),
   MissionMeta(
     id: 'story_crows_09',
     campaign: 'Italy - A Murder of Crows',
     title: 'The Shadow of Rome',
     location: 'Roma Colosseo - Nighttime',
-    objective: 'Infiltrate the Borgia encampment and assassinate their inner counsel.',
+    objective:
+        'Infiltrate the Borgia encampment and assassinate their inner counsel.',
   ),
   MissionMeta(
     id: 'story_crows_10',
@@ -184,7 +554,8 @@ const List<MissionMeta> kAllMissions = [
     campaign: 'Forlì - A Crimson Sunset',
     title: 'A Dangerous Alliance',
     location: 'Forlì - Foggy',
-    objective: 'Infiltrate the fortified watchtower and eliminate Borgia commanders.',
+    objective:
+        'Infiltrate the fortified watchtower and eliminate Borgia commanders.',
   ),
   MissionMeta(
     id: 'story_forli_03',
@@ -230,15 +601,22 @@ class GameAccessState {
   Set<String> unlockedMissions;
   Set<String> completedMissions;
   Set<String> unlockedCampaigns;
+  String? activeCustomMissionId;
+  String activeSlot; // default 'story_0015' (Contracts)
+  Map<String, Map<String, dynamic>> customMissions;
 
   GameAccessState({
     this.mode = 'fresh',
     Set<String>? unlockedMissions,
     Set<String>? completedMissions,
     Set<String>? unlockedCampaigns,
-  })  : unlockedMissions = unlockedMissions ?? {'story_tutorial_01'},
-        completedMissions = completedMissions ?? {},
-        unlockedCampaigns = unlockedCampaigns ?? {'campaign_1'};
+    this.activeCustomMissionId,
+    this.activeSlot = 'story_0015',
+    Map<String, Map<String, dynamic>>? customMissions,
+  }) : unlockedMissions = unlockedMissions ?? {'story_tutorial_01'},
+       completedMissions = completedMissions ?? {},
+       unlockedCampaigns = unlockedCampaigns ?? {'campaign_1'},
+       customMissions = customMissions ?? {};
 
   bool isUnlocked(String mid) => unlockedMissions.contains(mid);
   bool isCompleted(String mid) => completedMissions.contains(mid);
@@ -256,30 +634,47 @@ class GameAccessState {
       unlockedMissions.add(m.id);
       completedMissions.add(m.id);
     }
+    for (final cm in customMissions.keys) {
+      unlockedMissions.add(cm);
+    }
     unlockedCampaigns = {'campaign_1', 'campaign_2', 'campaign_3'};
   }
 
   Map<String, dynamic> toJson() => {
-        'mode': mode,
-        'unlockedMissions': unlockedMissions.toList(),
-        'completedMissions': completedMissions.toList(),
-        'unlockedCampaigns': unlockedCampaigns.toList(),
-      };
+    'mode': mode,
+    'unlockedMissions': unlockedMissions.toList(),
+    'completedMissions': completedMissions.toList(),
+    'unlockedCampaigns': unlockedCampaigns.toList(),
+    'activeCustomMissionId': activeCustomMissionId,
+    'activeSlot': activeSlot,
+    'customMissions': customMissions,
+  };
 
-  factory GameAccessState.fromJson(Map<String, dynamic> json) => GameAccessState(
+  factory GameAccessState.fromJson(Map<String, dynamic> json) =>
+      GameAccessState(
         mode: json['mode'] as String? ?? 'fresh',
-        unlockedMissions: (json['unlockedMissions'] as List<dynamic>?)
+        unlockedMissions:
+            (json['unlockedMissions'] as List<dynamic>?)
                 ?.map((e) => e.toString())
                 .toSet() ??
             {'story_tutorial_01'},
-        completedMissions: (json['completedMissions'] as List<dynamic>?)
+        completedMissions:
+            (json['completedMissions'] as List<dynamic>?)
                 ?.map((e) => e.toString())
                 .toSet() ??
             {},
-        unlockedCampaigns: (json['unlockedCampaigns'] as List<dynamic>?)
+        unlockedCampaigns:
+            (json['unlockedCampaigns'] as List<dynamic>?)
                 ?.map((e) => e.toString())
                 .toSet() ??
             {'campaign_1'},
+        activeCustomMissionId: json['activeCustomMissionId'] as String?,
+        activeSlot: json['activeSlot'] as String? ?? 'story_0015',
+        customMissions:
+            (json['customMissions'] as Map<String, dynamic>?)?.map(
+              (k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)),
+            ) ??
+            {},
       );
 }
 
@@ -307,6 +702,7 @@ class _ServerScreenState extends State<ServerScreen> {
 
   static const List<String> _candidateCustomDirs = [
     '/sdcard/Android/data/com.acid.server.companion_server/files/custom_missions',
+    '/sdcard/ACIdentity/custom_missions',
     '/sdcard/ACIdentity_Custom',
     '/sdcard/Android/data/com.ubisoft.assassinscreed.identity/files/custom_missions',
   ];
@@ -320,8 +716,69 @@ class _ServerScreenState extends State<ServerScreen> {
   void initState() {
     super.initState();
     _loadGameAccessState().then((_) {
-      _initAndStart();
+      _scanCustomMissionsFromDisk().then((_) {
+        _initAndStart();
+      });
     });
+  }
+
+  Future<void> _scanCustomMissionsFromDisk() async {
+    try {
+      final names = await _gameChannel.invokeListMethod<String>(
+        'listCustomMissions',
+      );
+      if (names == null || names.isEmpty) return;
+
+      bool changed = false;
+      for (final name in names) {
+        if (name.endsWith('.json')) {
+          final content = await _gameChannel.invokeMethod<String>(
+            'readCustomMissionFile',
+            {'filename': name},
+          );
+          if (content != null && content.isNotEmpty) {
+            try {
+              final map = jsonDecode(content) as Map<String, dynamic>;
+              final mid =
+                  map['missionId'] as String? ??
+                  map['id'] as String? ??
+                  name.replaceAll('.json', '');
+              if (!_gameState.customMissions.containsKey(mid)) {
+                _gameState.customMissions[mid] = map;
+                _gameState.unlockedMissions.add(mid);
+                changed = true;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      if (_gameState.activeCustomMissionId == null &&
+          _gameState.customMissions.isNotEmpty) {
+        _gameState.activeCustomMissionId = _gameState.customMissions.keys.first;
+        changed = true;
+      }
+      if (_gameState.activeCustomMissionId != null) {
+        final activeMid = _gameState.activeCustomMissionId!;
+        final map = _gameState.customMissions[activeMid];
+        if (map != null) {
+          final bin = buildCustomMissionBinary(map);
+          try {
+            await _gameChannel.invokeMethod('saveCustomMission', {
+              'filename': 'openMission_story_0015.bin',
+              'bytes': bin,
+            });
+            await _gameChannel.invokeMethod('saveCustomMission', {
+              'filename': 'openMission_$activeMid.bin',
+              'bytes': bin,
+            });
+          } catch (_) {}
+        }
+      }
+      if (changed) {
+        await _saveGameAccessState();
+        if (mounted) setState(() {});
+      }
+    } catch (_) {}
   }
 
   Future<void> _log(String message) async {
@@ -337,6 +794,25 @@ class _ServerScreenState extends State<ServerScreen> {
   }
 
   Future<void> _loadGameAccessState() async {
+    try {
+      final nativeContent = await _gameChannel.invokeMethod<String>(
+        'readGameState',
+      );
+      if (nativeContent != null && nativeContent.isNotEmpty) {
+        final map = jsonDecode(nativeContent) as Map<String, dynamic>;
+        _gameState = GameAccessState.fromJson(map);
+        if (_gameState.activeCustomMissionId == null &&
+            _gameState.customMissions.isNotEmpty) {
+          _gameState.activeCustomMissionId =
+              _gameState.customMissions.keys.first;
+        }
+        await _log(
+          'Loaded game access profile: ${_gameState.mode} (${_gameState.completedMissions.length} completed)',
+        );
+        return;
+      }
+    } catch (_) {}
+
     for (final p in _candidateStatePaths) {
       try {
         final f = File(p);
@@ -344,17 +820,30 @@ class _ServerScreenState extends State<ServerScreen> {
           final text = await f.readAsString();
           final map = jsonDecode(text) as Map<String, dynamic>;
           _gameState = GameAccessState.fromJson(map);
-          await _log('Loaded game access profile: ${_gameState.mode} (${_gameState.completedMissions.length} completed)');
+          if (_gameState.activeCustomMissionId == null &&
+              _gameState.customMissions.isNotEmpty) {
+            _gameState.activeCustomMissionId =
+                _gameState.customMissions.keys.first;
+          }
+          await _log(
+            'Loaded game access profile: ${_gameState.mode} (${_gameState.completedMissions.length} completed)',
+          );
           return;
         }
       } catch (_) {}
     }
     _gameState = GameAccessState();
-    await _log('Initialized default story game access state (Tutorial 1 unlocked)');
+    await _log(
+      'Initialized default story game access state (Tutorial 1 unlocked)',
+    );
   }
 
   Future<void> _saveGameAccessState() async {
-    final jsonStr = const JsonEncoder.withIndent('  ').convert(_gameState.toJson());
+    final jsonStr = const JsonEncoder.withIndent('  ')
+        .convert(_gameState.toJson());
+    try {
+      await _gameChannel.invokeMethod('writeGameState', {'content': jsonStr});
+    } catch (_) {}
     for (final p in _candidateStatePaths) {
       try {
         final f = File(p);
@@ -370,12 +859,19 @@ class _ServerScreenState extends State<ServerScreen> {
           m.id: {
             'WasUnlockShown': _gameState.isUnlocked(m.id),
             'WasCompletedShown': _gameState.isCompleted(m.id),
-          }
+          },
+        for (final cm in _gameState.customMissions.keys)
+          cm: {
+            'WasUnlockShown': _gameState.isUnlocked(cm),
+            'WasCompletedShown': _gameState.isCompleted(cm),
+          },
       },
       'entitlement': {
         'ntt_c350c141': true,
-        if (_gameState.unlockedCampaigns.contains('campaign_2')) 'ntt_5572b4db': true,
-        if (_gameState.unlockedCampaigns.contains('campaign_3')) 'ntt_0dd81737': true,
+        if (_gameState.unlockedCampaigns.contains('campaign_2'))
+          'ntt_5572b4db': true,
+        if (_gameState.unlockedCampaigns.contains('campaign_3'))
+          'ntt_0dd81737': true,
         if (_gameState.completedMissions.contains('story_crows_10')) ...{
           'ntt_bfc7ed30': true,
           'ntt_offline_rank1': true,
@@ -383,8 +879,8 @@ class _ServerScreenState extends State<ServerScreen> {
         for (final mid in _gameState.completedMissions) ...{
           'ntt_story_reward_$mid': true,
           'ntt_story_challenge_$mid': true,
-        }
-      }
+        },
+      },
     };
     try {
       final lsStr = const JsonEncoder.withIndent('  ').convert(lsData);
@@ -510,11 +1006,7 @@ class _ServerScreenState extends State<ServerScreen> {
     k++;
 
     final profileBeforeF32 = data.sublist(k, tagPos);
-    final newProfile = <int>[
-      ...profileBeforeF32,
-      ...newF32,
-      ...suffix,
-    ];
+    final newProfile = <int>[...profileBeforeF32, ...newF32, ...suffix];
 
     final plVar = <int>[];
     int tmpPl = newProfile.length;
@@ -533,7 +1025,8 @@ class _ServerScreenState extends State<ServerScreen> {
   }
 
   Future<Uint8List?> _getActiveAuthResponse() async {
-    final unlockedBytes = await _loadAsset('assets/responses/auth_unlocked.bin') ??
+    final unlockedBytes =
+        await _loadAsset('assets/responses/auth_unlocked.bin') ??
         await _loadAsset('assets/responses/auth.bin');
     if (unlockedBytes == null) {
       return await _loadAsset('assets/responses/auth_fresh.bin');
@@ -555,7 +1048,9 @@ class _ServerScreenState extends State<ServerScreen> {
       if (catBytes != null) {
         final catJson = utf8.decode(catBytes);
         _catalogue = jsonDecode(catJson) as Map<String, dynamic>;
-        await _log('Catalogue loaded: ${_catalogue.length} CDN entries indexed');
+        await _log(
+          'Catalogue loaded: ${_catalogue.length} CDN entries indexed',
+        );
       }
     } catch (e) {
       await _log('Warning: could not load catalogue.json: $e');
@@ -580,6 +1075,10 @@ class _ServerScreenState extends State<ServerScreen> {
       setState(() => _isRunning = true);
       await _log('Offline server listening on http://127.0.0.1:8080');
 
+      try {
+        await _gameChannel.invokeMethod('startForegroundService');
+      } catch (_) {}
+
       _server!.listen(
         _handleHttpRequest,
         onError: (e) => _log('Server error: $e'),
@@ -591,11 +1090,53 @@ class _ServerScreenState extends State<ServerScreen> {
   }
 
   Future<void> _stopServer() async {
-    if (!_isRunning || _server == null) return;
-    await _server!.close(force: true);
-    _server = null;
+    if (!_isRunning && _server == null) {
+      try {
+        await _gameChannel.invokeMethod('stopForegroundService');
+      } catch (_) {}
+      return;
+    }
+    if (_server != null) {
+      await _server!.close(force: true);
+      _server = null;
+    }
     setState(() => _isRunning = false);
-    await _log('Server stopped');
+    try {
+      await _gameChannel.invokeMethod('stopForegroundService');
+    } catch (_) {}
+    await _log('Server stopped & foreground service terminated');
+  }
+
+  Future<Uint8List?> _getCustomMissionBinary(String mid) async {
+    for (final dir in _candidateCustomDirs) {
+      final f = File('$dir/openMission_$mid.bin');
+      if (await f.exists()) {
+        try {
+          return await f.readAsBytes();
+        } catch (_) {}
+      }
+    }
+    for (final dir in _candidateCustomDirs) {
+      final f = File('$dir/$mid.json');
+      if (await f.exists()) {
+        try {
+          final text = await f.readAsString();
+          final map = jsonDecode(text) as Map<String, dynamic>;
+          final bin = buildCustomMissionBinary(map);
+          await f.parent.create(recursive: true);
+          await File('$dir/openMission_$mid.bin').writeAsBytes(bin);
+          return bin;
+        } catch (_) {}
+      }
+    }
+    if (_gameState.customMissions.containsKey(mid)) {
+      try {
+        final map = _gameState.customMissions[mid]!;
+        final bin = buildCustomMissionBinary(map);
+        return bin;
+      } catch (_) {}
+    }
+    return null;
   }
 
   Future<void> _handleHttpRequest(HttpRequest request) async {
@@ -645,6 +1186,9 @@ class _ServerScreenState extends State<ServerScreen> {
         // Story progression handling:
         if (mid != 'default') {
           _gameState.completedMissions.add(mid);
+          if (_gameState.activeCustomMissionId != null) {
+            _gameState.completedMissions.add(_gameState.activeCustomMissionId!);
+          }
           final idx = kAllMissions.indexWhere((m) => m.id == mid);
           if (idx >= 0 && idx + 1 < kAllMissions.length) {
             final nextMid = kAllMissions[idx + 1].id;
@@ -666,8 +1210,53 @@ class _ServerScreenState extends State<ServerScreen> {
             break;
           }
         }
+        for (final cm in _gameState.customMissions.keys) {
+          if (bodyStr.contains(cm)) {
+            mid = cm;
+            break;
+          }
+        }
         _activeMissionId = mid;
         reqType = 'GetMissionInfo($mid)';
+
+        // Check if active custom mission has custom info
+        final activeCustomId =
+            _gameState.activeCustomMissionId ??
+            (_gameState.customMissions.isNotEmpty
+                ? _gameState.customMissions.keys.first
+                : null);
+        final targetSlot = _gameState.activeSlot;
+        if (activeCustomId != null &&
+            (mid == targetSlot ||
+                targetSlot == 'all' ||
+                targetSlot == 'both' ||
+                mid == 'default' ||
+                mid == 'story_0015' ||
+                mid == 'story_crows_01' ||
+                mid == activeCustomId)) {
+          for (final dir in _candidateCustomDirs) {
+            final f = File('$dir/getMissionInfo_$activeCustomId.bin');
+            if (await f.exists()) {
+              try {
+                final b = await f.readAsBytes();
+                request.response
+                  ..statusCode = HttpStatus.ok
+                  ..headers.contentType = ContentType(
+                    'application',
+                    'x-protobuf',
+                  )
+                  ..headers.contentLength = b.length
+                  ..add(b);
+                await request.response.close();
+                await _log(
+                  '$method GetMissionInfo($mid) -> Served Custom Info (${b.length}b)',
+                );
+                return;
+              } catch (_) {}
+            }
+          }
+        }
+
         respAsset = 'assets/responses/getMissionInfo_$mid.bin';
       } else if (_containsSequence(bodyBytes, [0xC2, 0x0C])) {
         String mid = 'default';
@@ -677,25 +1266,59 @@ class _ServerScreenState extends State<ServerScreen> {
             break;
           }
         }
+        for (final cm in _gameState.customMissions.keys) {
+          if (bodyStr.contains(cm)) {
+            mid = cm;
+            break;
+          }
+        }
         _activeMissionId = mid;
         reqType = 'OpenMission($mid)';
 
-        // Check if custom uploaded mission exists on device storage
-        for (final customDir in _candidateCustomDirs) {
-          final customBin = File('$customDir/openMission_$mid.bin');
-          if (await customBin.exists()) {
-            try {
-              final customBytes = await customBin.readAsBytes();
-              request.response
-                ..statusCode = HttpStatus.ok
-                ..headers.contentType = ContentType('application', 'x-protobuf')
-                ..headers.contentLength = customBytes.length
-                ..add(customBytes);
-              await request.response.close();
-              await _log('$method OpenMission($mid) -> Served Custom File (${customBytes.length}b)');
-              return;
-            } catch (_) {}
+        // 1. Check if an active custom mission overrides this slot or any mission
+        final activeCustomId =
+            _gameState.activeCustomMissionId ??
+            (_gameState.customMissions.isNotEmpty
+                ? _gameState.customMissions.keys.first
+                : null);
+        final targetSlot = _gameState.activeSlot;
+
+        if (activeCustomId != null &&
+            (mid == targetSlot ||
+                targetSlot == 'all' ||
+                targetSlot == 'both' ||
+                mid == 'default' ||
+                mid == 'story_0015' ||
+                mid == 'story_crows_01' ||
+                mid == activeCustomId)) {
+          final customBytes = await _getCustomMissionBinary(activeCustomId);
+          if (customBytes != null) {
+            request.response
+              ..statusCode = HttpStatus.ok
+              ..headers.contentType = ContentType('application', 'x-protobuf')
+              ..headers.contentLength = customBytes.length
+              ..add(customBytes);
+            await request.response.close();
+            await _log(
+              '$method OpenMission($mid) -> Served Active Custom Mission "$activeCustomId" (${customBytes.length}b)',
+            );
+            return;
           }
+        }
+
+        // 2. Check if a custom binary exists for the requested mission ID directly
+        final customBytes = await _getCustomMissionBinary(mid);
+        if (customBytes != null) {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.contentType = ContentType('application', 'x-protobuf')
+            ..headers.contentLength = customBytes.length
+            ..add(customBytes);
+          await request.response.close();
+          await _log(
+            '$method OpenMission($mid) -> Served Custom File (${customBytes.length}b)',
+          );
+          return;
         }
 
         respAsset = 'assets/responses/openMission_$mid.bin';
@@ -719,8 +1342,20 @@ class _ServerScreenState extends State<ServerScreen> {
       Uint8List? respBytes = directBytes;
       if (respBytes == null && respAsset != null) {
         respBytes = await _loadAsset(respAsset);
-        if (respBytes == null && reqType.startsWith('EndMission')) {
-          respBytes = await _loadAsset('assets/responses/endMission.bin');
+        if (respBytes == null) {
+          if (reqType.startsWith('OpenMission')) {
+            respBytes = await _loadAsset(
+              'assets/responses/openMission_default.bin',
+            );
+          } else if (reqType.startsWith('GetMissionInfo')) {
+            respBytes = await _loadAsset(
+              'assets/responses/getMissionInfo_default.bin',
+            );
+          } else if (reqType.startsWith('EndMission')) {
+            respBytes = await _loadAsset(
+              'assets/responses/endMission_default.bin',
+            );
+          }
         }
         respBytes ??= await _loadAsset('assets/responses/auth.bin');
       }
@@ -770,7 +1405,8 @@ class _ServerScreenState extends State<ServerScreen> {
       return;
     }
 
-    final fileId = entry['id'] as String? ?? entry['relative_path'] as String? ?? relative;
+    final fileId =
+        entry['id'] as String? ?? entry['relative_path'] as String? ?? relative;
     final zipped = entry['zipped'] as bool? ?? false;
 
     File? foundFile;
@@ -808,7 +1444,9 @@ class _ServerScreenState extends State<ServerScreen> {
       ..headers.contentLength = bytes.length
       ..add(bytes);
     await request.response.close();
-    await _log('CDN 200: $relative (${bytes.length}b${zipped ? ", zlib" : ""})');
+    await _log(
+      'CDN 200: $relative (${bytes.length}b${zipped ? ", zlib" : ""})',
+    );
   }
 
   bool _containsSequence(List<int> source, List<int> seq) {
@@ -828,7 +1466,8 @@ class _ServerScreenState extends State<ServerScreen> {
 
   Future<void> _launchGame() async {
     try {
-      final isInstalled = await _gameChannel.invokeMethod<bool>('isGameInstalled') ?? false;
+      final isInstalled =
+          await _gameChannel.invokeMethod<bool>('isGameInstalled') ?? false;
       if (!isInstalled) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -842,7 +1481,8 @@ class _ServerScreenState extends State<ServerScreen> {
       }
 
       await _log('Launching Assassin\'s Creed Identity...');
-      final launched = await _gameChannel.invokeMethod<bool>('openGame') ?? false;
+      final launched =
+          await _gameChannel.invokeMethod<bool>('openGame') ?? false;
       if (!launched) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -898,11 +1538,7 @@ class _ServerScreenState extends State<ServerScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0xFF00E5FF), width: 1.5),
               ),
-              child: const Icon(
-                Icons.hub,
-                color: Color(0xFF00E5FF),
-                size: 20,
-              ),
+              child: const Icon(Icons.hub, color: Color(0xFF00E5FF), size: 20),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -948,10 +1584,11 @@ class _ServerScreenState extends State<ServerScreen> {
                               : const Color(0xFFFF5252),
                           boxShadow: [
                             BoxShadow(
-                              color: (_isRunning
-                                      ? const Color(0xFF00E676)
-                                      : const Color(0xFFFF5252))
-                                  .withOpacity(0.5),
+                              color:
+                                  (_isRunning
+                                          ? const Color(0xFF00E676)
+                                          : const Color(0xFFFF5252))
+                                      .withValues(alpha: 0.5),
                               blurRadius: 8,
                               spreadRadius: 2,
                             ),
@@ -978,7 +1615,7 @@ class _ServerScreenState extends State<ServerScreen> {
                                 ? 'http://127.0.0.1:8080 (Active)'
                                 : 'Tap switch to start',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
+                              color: Colors.white.withValues(alpha: 0.6),
                               fontSize: 12,
                             ),
                           ),
@@ -993,10 +1630,12 @@ class _ServerScreenState extends State<ServerScreen> {
                     alignment: Alignment.centerRight,
                     child: Switch(
                       value: _isRunning,
-                      activeColor: const Color(0xFF00E676),
-                      activeTrackColor: const Color(0xFF00E676).withOpacity(0.3),
+                      activeThumbColor: const Color(0xFF00E676),
+                      activeTrackColor: const Color(0xFF00E676)
+                          .withValues(alpha: 0.3),
                       inactiveThumbColor: const Color(0xFFFF5252),
-                      inactiveTrackColor: const Color(0xFFFF5252).withOpacity(0.3),
+                      inactiveTrackColor: const Color(0xFFFF5252)
+                          .withValues(alpha: 0.3),
                       onChanged: (val) {
                         if (val) {
                           _startServer();
@@ -1013,7 +1652,10 @@ class _ServerScreenState extends State<ServerScreen> {
 
           // Primary Actions
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 12.0,
+            ),
             child: Row(
               children: [
                 // Open Game Button
@@ -1024,7 +1666,10 @@ class _ServerScreenState extends State<ServerScreen> {
                     icon: const Icon(Icons.sports_esports, color: Colors.white),
                     label: const Text(
                       'Launch Game',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFC02A2A),
@@ -1059,14 +1704,20 @@ class _ServerScreenState extends State<ServerScreen> {
                           '$completedCount / $totalCount Done (${_gameState.mode.toUpperCase()})',
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                           ),
                         ),
                       ],
                     ),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF00E5FF), width: 1.5),
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                      side: const BorderSide(
+                        color: Color(0xFF00E5FF),
+                        width: 1.5,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 8,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -1102,7 +1753,10 @@ class _ServerScreenState extends State<ServerScreen> {
           // Activity Logs ListView
           Expanded(
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+              margin: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 6.0,
+              ),
               padding: const EdgeInsets.all(8.0),
               decoration: BoxDecoration(
                 color: const Color(0xFF080C12),
@@ -1122,11 +1776,16 @@ class _ServerScreenState extends State<ServerScreen> {
                       itemBuilder: (ctx, idx) {
                         final log = _logs[idx];
                         Color color = Colors.white70;
-                        if (log.contains('200 OK') || log.contains('online') || log.contains('completed')) {
+                        if (log.contains('200 OK') ||
+                            log.contains('online') ||
+                            log.contains('completed')) {
                           color = const Color(0xFF81C784);
-                        } else if (log.contains('404') || log.contains('error') || log.contains('Failed')) {
+                        } else if (log.contains('404') ||
+                            log.contains('error') ||
+                            log.contains('Failed')) {
                           color = const Color(0xFFE57373);
-                        } else if (log.contains('OpenMission') || log.contains('EndMission')) {
+                        } else if (log.contains('OpenMission') ||
+                            log.contains('EndMission')) {
                           color = const Color(0xFF4FC3F7);
                         }
                         return Padding(
@@ -1168,61 +1827,232 @@ class GameAccessScreen extends StatefulWidget {
   State<GameAccessScreen> createState() => _GameAccessScreenState();
 }
 
-class _GameAccessScreenState extends State<GameAccessScreen> {
+class _GameAccessScreenState extends State<GameAccessScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   String _selectedCampaignFilter = 'All';
 
-  void _resetAllMissions() {
-    showDialog(
+  final _uploadIdController = TextEditingController(text: 'story_custom_01');
+  final _uploadTitleController = TextEditingController(
+    text: 'Shadows over Florence',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    _scanAndLoadCustomMissions();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _uploadIdController.dispose();
+    _uploadTitleController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _scanAndLoadCustomMissions() async {
+    try {
+      final names = await widget.gameChannel.invokeListMethod<String>(
+        'listCustomMissions',
+      );
+      if (names == null || names.isEmpty) return;
+      bool changed = false;
+      for (final name in names) {
+        if (name.endsWith('.json')) {
+          final content = await widget.gameChannel.invokeMethod<String>(
+            'readCustomMissionFile',
+            {'filename': name},
+          );
+          if (content != null && content.isNotEmpty) {
+            try {
+              final map = jsonDecode(content) as Map<String, dynamic>;
+              final mid =
+                  map['missionId'] as String? ??
+                  map['id'] as String? ??
+                  name.replaceAll('.json', '');
+              if (!widget.gameState.customMissions.containsKey(mid)) {
+                widget.gameState.customMissions[mid] = map;
+                widget.gameState.unlockedMissions.add(mid);
+                changed = true;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+      if (widget.gameState.activeCustomMissionId == null &&
+          widget.gameState.customMissions.isNotEmpty) {
+        widget.gameState.activeCustomMissionId =
+            widget.gameState.customMissions.keys.first;
+        changed = true;
+      }
+      if (changed && mounted) {
+        setState(() {});
+        await widget.onStateChanged(widget.gameState);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _setActiveCustomMission(
+    String mid, [
+    String slot = 'story_0015',
+  ]) async {
+    final map = widget.gameState.customMissions[mid];
+    if (map != null) {
+      final bin = buildCustomMissionBinary(map);
+      await widget.gameChannel.invokeMethod('saveCustomMission', {
+        'filename': 'openMission_story_0015.bin',
+        'bytes': bin,
+      });
+      await widget.gameChannel.invokeMethod('saveCustomMission', {
+        'filename': 'openMission_story_crows_01.bin',
+        'bytes': bin,
+      });
+      if (slot != 'story_0015' && slot != 'story_crows_01') {
+        await widget.gameChannel.invokeMethod('saveCustomMission', {
+          'filename': 'openMission_$slot.bin',
+          'bytes': bin,
+        });
+      }
+      await widget.gameChannel.invokeMethod('saveCustomMission', {
+        'filename': 'openMission_$mid.bin',
+        'bytes': bin,
+      });
+    }
+
+    setState(() {
+      widget.gameState.activeCustomMissionId = mid;
+      widget.gameState.activeSlot = slot;
+      widget.gameState.unlockedMissions.add(mid);
+      widget.gameState.unlockedMissions.add('story_0015');
+      widget.gameState.unlockedMissions.add('story_crows_01');
+      if (slot.isNotEmpty) widget.gameState.unlockedMissions.add(slot);
+      widget.gameState.mode = 'custom';
+    });
+    await widget.onStateChanged(widget.gameState);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Custom mission activated! Playable under CONTRACTS & ITALY (A Murder of Crows)!',
+          ),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteCustomMission(String mid) async {
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reset All Level Progress?'),
-        content: const Text(
-          'This will lock all campaigns and reset story progress back to initial default (only Tutorial 1 unlocked).\n\nAll missions will be playable in natural story progression.',
+        backgroundColor: const Color(0xFF162130),
+        title: const Text(
+          'Delete Custom Mission?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to remove "$mid"? This will delete its mission file from your device.',
+          style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
           ),
           ElevatedButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              setState(() {
-                widget.gameState.resetAll();
-              });
-              await widget.onStateChanged(widget.gameState);
-              try {
-                await widget.gameChannel.invokeMethod('deleteGameLocalStorage');
-              } catch (_) {}
-              await widget.onLog('Game progress reset: Only Tutorial 1 is unlocked.');
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Level progress reset! Only Tutorial 1 unlocked.'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF5252)),
-            child: const Text('Reset All'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+
+    if (confirm != true) return;
+
+    try {
+      await widget.gameChannel.invokeMethod('deleteCustomMission', {
+        'filename': mid,
+      });
+      setState(() {
+        widget.gameState.customMissions.remove(mid);
+        widget.gameState.unlockedMissions.remove(mid);
+        if (widget.gameState.activeCustomMissionId == mid) {
+          widget.gameState.activeCustomMissionId =
+              widget.gameState.customMissions.isNotEmpty
+              ? widget.gameState.customMissions.keys.first
+              : null;
+        }
+      });
+      await widget.onStateChanged(widget.gameState);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Custom mission "$mid" deleted.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Delete error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
-  void _unlockAllMissions() async {
+  Future<void> _unlockAllMissions() async {
     setState(() {
-      widget.gameState.unlockAll();
+      widget.gameState.mode = 'unlocked';
+      for (final m in kAllMissions) {
+        widget.gameState.unlockedMissions.add(m.id);
+      }
+      for (final cm in widget.gameState.customMissions.keys) {
+        widget.gameState.unlockedMissions.add(cm);
+      }
+      widget.gameState.unlockedCampaigns.addAll([
+        'campaign_1',
+        'campaign_2',
+        'campaign_3',
+      ]);
     });
     await widget.onStateChanged(widget.gameState);
-    await widget.onLog('Game progress unlocked: All 24 missions and campaigns unlocked.');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All campaigns and 24 missions unlocked!'),
+          content: Text('All missions and campaigns unlocked!'),
           backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resetAllMissions() async {
+    setState(() {
+      widget.gameState.mode = 'fresh';
+      widget.gameState.unlockedMissions.clear();
+      widget.gameState.completedMissions.clear();
+      widget.gameState.unlockedCampaigns.clear();
+      widget.gameState.unlockedMissions.add('story_tutorial_01');
+      widget.gameState.unlockedCampaigns.add('campaign_1');
+    });
+    await widget.onStateChanged(widget.gameState);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All progress reset (Story Mode: Tutorial 1).'),
+          backgroundColor: Colors.orange,
         ),
       );
     }
@@ -1254,82 +2084,148 @@ class _GameAccessScreenState extends State<GameAccessScreen> {
     await widget.onStateChanged(widget.gameState);
   }
 
-  void _openUploadMissionDialog() {
-    final missionIdController = TextEditingController(text: 'custom_mission_01');
-    final titleController = TextEditingController();
-    final objController = TextEditingController(text: 'Eliminate the designated targets.');
-    String selectedRegion = 'Firenze_Palazzo';
-    String selectedMood = 'Daytime';
+  Future<void> _downloadSkillFiles() async {
+    try {
+      try {
+        await widget.gameChannel.invokeMethod('requestStoragePermission');
+      } catch (_) {}
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) => AlertDialog(
-          title: const Text('Upload / Register Custom Mission'),
+      final skillMd = await rootBundle.loadString('assets/skill/SKILL.md');
+      String instructionsMd = '';
+      try {
+        instructionsMd = await rootBundle.loadString(
+          'assets/skill/INSTRUCTIONS.md',
+        );
+      } catch (_) {}
+      final specMd = await rootBundle.loadString(
+        'assets/skill/CUSTOM_MISSION_SPEC.md',
+      );
+      final sampleJson = await rootBundle.loadString(
+        'assets/skill/sample_mission.json',
+      );
+
+      final res = await widget.gameChannel.invokeMapMethod<String, dynamic>(
+        'exportSkillFiles',
+        {
+          'skillMd': skillMd,
+          'instructionsMd': instructionsMd,
+          'specMd': specMd,
+          'sampleJson': sampleJson,
+        },
+      );
+
+      final downloadPath =
+          res?['path'] as String? ??
+          '/sdcard/Download/ACIdentity_Mission_Skill';
+
+      if (!mounted) return;
+
+      const aiPromptText =
+          "You are the Senior Mission Director for Assassin's Creed Identity (v2.8.2). "
+          "Please read the attached SKILL.md and INSTRUCTIONS.md. "
+          "Interview me step-by-step: ask me for the game slot, location, weather/mood, objective (kill, protect, follow noble/king/maid on rooftops), and enemy targets. "
+          "Once we agree, output a valid custom mission JSON matching the specification.";
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF162130),
+          title: Row(
+            children: const [
+              Icon(Icons.check_circle, color: Color(0xFF00E676)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Skill & Assets Package Exported',
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
           content: SingleChildScrollView(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: missionIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Mission ID',
-                    hintText: 'e.g. custom_mission_01',
-                    border: OutlineInputBorder(),
+                const Text(
+                  'Package exported to your device Downloads folder:',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black38,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Text(
+                    downloadPath,
+                    style: const TextStyle(
+                      color: Color(0xFF00E5FF),
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Mission Title',
-                    hintText: 'e.g. Shadows of Florence',
-                    border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                const Text(
+                  'Files included:\n'
+                  '• SKILL.md (Autonomous Mission Designer Skill)\n'
+                  '• INSTRUCTIONS.md (Interactive AI Interview Protocol)\n'
+                  '• AC_IDENTITY_ASSETS_GUIDE.pdf (3-Page Printable Encyclopedia)\n'
+                  '• CUSTOM_MISSION_SPEC.md (Coordinates & Archetypes)\n'
+                  '• sample_mission.json (Working Example)',
+                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await widget.gameChannel.invokeMethod(
+                          'shareSkillFiles',
+                        );
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Share error: $e')),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.share, size: 16),
+                    label: const Text('Share / Open Package (PDF & Files)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E676),
+                      foregroundColor: Colors.black,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedRegion,
-                  decoration: const InputDecoration(
-                    labelText: 'Location / Region',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Firenze_Palazzo', child: Text('Firenze Palazzo')),
-                    DropdownMenuItem(value: 'Firenze_SantaCroce', child: Text('Firenze Santa Croce')),
-                    DropdownMenuItem(value: 'Roma_Coloseum', child: Text('Roma Colosseo')),
-                    DropdownMenuItem(value: 'Monteriggioni', child: Text('Monteriggioni')),
-                    DropdownMenuItem(value: 'Forli', child: Text('Forlì')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setDlgState(() => selectedRegion = val);
-                  },
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedMood,
-                  decoration: const InputDecoration(
-                    labelText: 'Time of Day / Atmosphere',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Daytime', child: Text('Daytime')),
-                    DropdownMenuItem(value: 'Nighttime', child: Text('Nighttime')),
-                    DropdownMenuItem(value: 'Dusk', child: Text('Dusk')),
-                    DropdownMenuItem(value: 'Foggy', child: Text('Foggy')),
-                    DropdownMenuItem(value: 'Sunny', child: Text('Sunny')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setDlgState(() => selectedMood = val);
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: objController,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Primary Objective',
-                    border: OutlineInputBorder(),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(
+                        const ClipboardData(text: aiPromptText),
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'AI Interview Prompt copied to clipboard!',
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copy AI Prompt to Clipboard'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E5FF),
+                      foregroundColor: Colors.black,
+                    ),
                   ),
                 ),
               ],
@@ -1338,284 +2234,1313 @@ class _GameAccessScreenState extends State<GameAccessScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final mid = missionIdController.text.trim();
-                final title = titleController.text.trim().isEmpty ? 'Custom Mission' : titleController.text.trim();
-                final obj = objController.text.trim();
-
-                final customDef = {
-                  'id': mid,
-                  'title': title,
-                  'region': selectedRegion,
-                  'mood': selectedMood,
-                  'objective': obj,
-                  'timestamp': DateTime.now().toIso8601String(),
-                };
-
-                final jsonStr = jsonEncode(customDef);
-                await widget.gameChannel.invokeMethod('saveCustomMission', {
-                  'filename': '$mid.json',
-                  'text': jsonStr,
-                });
-
-                setState(() {
-                  widget.gameState.mode = 'custom';
-                  widget.gameState.unlockedMissions.add(mid);
-                });
-                await widget.onStateChanged(widget.gameState);
-
-                if (mounted) {
-                  Navigator.of(ctx).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Registered custom mission "$title"!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E5FF), foregroundColor: Colors.black),
-              child: const Text('Save & Register'),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Colors.white70),
+              ),
             ),
           ],
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error downloading skill: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickAndUploadMission() async {
+    try {
+      final picked = await widget.gameChannel.invokeMapMethod<String, dynamic>(
+        'pickMissionFile',
+      );
+      if (picked == null) return;
+
+      final name = picked['name'] as String? ?? 'mission.json';
+      final text = picked['text'] as String?;
+      final bytes = picked['bytes'] as Uint8List?;
+
+      String mid = _uploadIdController.text.trim();
+      if (mid.isEmpty) {
+        mid = name.replaceAll('.json', '').replaceAll('.bin', '');
+        if (mid.startsWith('openMission_'))
+          mid = mid.substring('openMission_'.length);
+      }
+      String title = _uploadTitleController.text.trim();
+      if (title.isEmpty) {
+        title = mid.replaceAll('_', ' ').toUpperCase();
+      }
+
+      if (name.endsWith('.bin') && bytes != null) {
+        await widget.gameChannel.invokeMethod('saveCustomMission', {
+          'filename': 'openMission_$mid.bin',
+          'bytes': bytes,
+        });
+        await widget.gameChannel.invokeMethod('saveCustomMission', {
+          'filename': 'openMission_story_0015.bin',
+          'bytes': bytes,
+        });
+        await widget.gameChannel.invokeMethod('saveCustomMission', {
+          'filename': 'openMission_story_crows_01.bin',
+          'bytes': bytes,
+        });
+        final customDef = {
+          'missionId': mid,
+          'title': title,
+          'region': 'Firenze_Palazzo',
+          'mood': 'Daytime',
+          'objective': 'Custom binary mission payload.',
+          'targetSlot': 'both',
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        await widget.gameChannel.invokeMethod('saveCustomMission', {
+          'filename': '$mid.json',
+          'text': jsonEncode(customDef),
+        });
+
+        setState(() {
+          _uploadIdController.text = mid;
+          _uploadTitleController.text = title;
+          widget.gameState.customMissions[mid] = customDef;
+          widget.gameState.activeCustomMissionId = mid;
+          widget.gameState.activeSlot = 'story_0015';
+          widget.gameState.unlockedMissions.add(mid);
+          widget.gameState.unlockedMissions.add('story_0015');
+          widget.gameState.unlockedMissions.add('story_crows_01');
+          widget.gameState.mode = 'custom';
+        });
+        await widget.onStateChanged(widget.gameState);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Binary mission "$title" installed, activated & added to Custom: Mission!',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          _tabController.animateTo(1);
+        }
+        return;
+      }
+
+      if (text != null && text.isNotEmpty) {
+        try {
+          final map = jsonDecode(text) as Map<String, dynamic>;
+          final jsonMid = map['missionId'] as String? ?? map['id'] as String?;
+          final jsonTitle = map['title'] as String?;
+          if (jsonMid != null && jsonMid.isNotEmpty) mid = jsonMid;
+          if (jsonTitle != null && jsonTitle.isNotEmpty) title = jsonTitle;
+
+          _uploadIdController.text = mid;
+          _uploadTitleController.text = title;
+
+          map['missionId'] = mid;
+          map['title'] = title;
+          map['targetSlot'] = 'both';
+
+          final bin = buildCustomMissionBinary(map);
+          await widget.gameChannel.invokeMethod('saveCustomMission', {
+            'filename': '$mid.json',
+            'text': jsonEncode(map),
+          });
+          await widget.gameChannel.invokeMethod('saveCustomMission', {
+            'filename': 'openMission_$mid.bin',
+            'bytes': bin,
+          });
+          await widget.gameChannel.invokeMethod('saveCustomMission', {
+            'filename': 'openMission_story_0015.bin',
+            'bytes': bin,
+          });
+          await widget.gameChannel.invokeMethod('saveCustomMission', {
+            'filename': 'openMission_story_crows_01.bin',
+            'bytes': bin,
+          });
+
+          setState(() {
+            widget.gameState.customMissions[mid] = map;
+            widget.gameState.activeCustomMissionId = mid;
+            widget.gameState.activeSlot = 'story_0015';
+            widget.gameState.unlockedMissions.add(mid);
+            widget.gameState.unlockedMissions.add('story_0015');
+            widget.gameState.unlockedMissions.add('story_crows_01');
+            widget.gameState.mode = 'custom';
+          });
+          await widget.onStateChanged(widget.gameState);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Custom mission "$title" uploaded & activated in Contracts & Italy!',
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+            _tabController.animateTo(1);
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Invalid mission JSON: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _manualSaveAndActivate() async {
+    final mid = _uploadIdController.text.trim();
+    final title = _uploadTitleController.text.trim().isEmpty
+        ? 'Custom Mission'
+        : _uploadTitleController.text.trim();
+
+    if (mid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a Mission ID.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final customDef = {
+      'missionId': mid,
+      'title': title,
+      'region': 'Firenze_Palazzo',
+      'mood': 'Daytime',
+      'objective': 'Eliminate designated targets.',
+      'targetSlot': 'both',
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    final jsonStr = jsonEncode(customDef);
+    final bin = buildCustomMissionBinary(customDef);
+
+    await widget.gameChannel.invokeMethod('saveCustomMission', {
+      'filename': '$mid.json',
+      'text': jsonStr,
+    });
+    await widget.gameChannel.invokeMethod('saveCustomMission', {
+      'filename': 'openMission_$mid.bin',
+      'bytes': bin,
+    });
+    await widget.gameChannel.invokeMethod('saveCustomMission', {
+      'filename': 'openMission_story_0015.bin',
+      'bytes': bin,
+    });
+    await widget.gameChannel.invokeMethod('saveCustomMission', {
+      'filename': 'openMission_story_crows_01.bin',
+      'bytes': bin,
+    });
+
+    setState(() {
+      widget.gameState.customMissions[mid] = customDef;
+      widget.gameState.activeCustomMissionId = mid;
+      widget.gameState.activeSlot = 'story_0015';
+      widget.gameState.mode = 'custom';
+      widget.gameState.unlockedMissions.add(mid);
+      widget.gameState.unlockedMissions.add('story_0015');
+      widget.gameState.unlockedMissions.add('story_crows_01');
+    });
+    await widget.onStateChanged(widget.gameState);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Custom mission "$title" saved & active in Contracts & Italy!',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      _tabController.animateTo(1);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredMissions = _selectedCampaignFilter == 'All'
-        ? kAllMissions
-        : kAllMissions.where((m) => m.campaign.contains(_selectedCampaignFilter)).toList();
+    final customList = widget.gameState.customMissions.values.map((json) {
+      final mid =
+          json['missionId'] as String? ?? json['id'] as String? ?? 'custom';
+      final title = json['title'] as String? ?? 'Custom Mission';
+      final region = json['region'] as String? ?? 'Firenze_Palazzo';
+      final mood = json['mood'] as String? ?? 'Daytime';
+      final obj =
+          json['objective'] as String? ??
+          (json['briefing'] as String? ?? 'Eliminate targets');
+      final slot = json['targetSlot'] as String? ?? widget.gameState.activeSlot;
+      return MissionMeta(
+        id: mid,
+        campaign: '★ Custom Missions',
+        title: title,
+        location: '$region - $mood',
+        objective: obj,
+        isCustom: true,
+        targetSlot: slot,
+      );
+    }).toList();
 
-    final unlockedCount = widget.gameState.unlockedMissions.length;
-    final completedCount = widget.gameState.completedMissions.length;
+    final allMissions = [...customList, ...kAllMissions];
+
+    final filteredCampaignMissions = _selectedCampaignFilter == 'All'
+        ? kAllMissions
+        : kAllMissions
+              .where((m) => m.campaign.contains(_selectedCampaignFilter))
+              .toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Game Access & Mission Manager'),
+        title: const Text('Game Server'),
         backgroundColor: const Color(0xFF101722),
         actions: [
           IconButton(
-            tooltip: 'Upload Custom Mission',
-            icon: const Icon(Icons.file_upload, color: Color(0xFF00E5FF)),
-            onPressed: _openUploadMissionDialog,
+            tooltip: 'Download Skill & Assets PDF',
+            icon: const Icon(Icons.download, color: Color(0xFF00E5FF)),
+            onPressed: _downloadSkillFiles,
+          ),
+          IconButton(
+            tooltip: 'Share / Open Package',
+            icon: const Icon(Icons.share, color: Color(0xFF00E676)),
+            onPressed: () => widget.gameChannel.invokeMethod('shareSkillFiles'),
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: const Color(0xFF00E5FF),
+          labelColor: const Color(0xFF00E5FF),
+          unselectedLabelColor: Colors.white60,
+          labelStyle: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+          tabs: [
+            const Tab(icon: Icon(Icons.shield, size: 18), text: 'Campaign'),
+            Tab(
+              icon: const Icon(Icons.star, size: 18),
+              text: 'Custom: Mission (${customList.length})',
+            ),
+            const Tab(icon: Icon(Icons.file_upload, size: 18), text: 'Upload'),
+            const Tab(
+              icon: Icon(Icons.menu_book, size: 18),
+              text: 'Guide & Assets',
+            ),
+          ],
+        ),
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          // Mode Status Banner
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: const Color(0xFF162130),
-            child: Row(
-              children: [
-                Icon(
+          _buildCampaignTab(filteredCampaignMissions, allMissions.length),
+          _buildCustomMissionTab(customList),
+          _buildUploadTab(),
+          _buildGuideTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignTab(List<MissionMeta> missions, int totalMissionsCount) {
+    final unlockedCount = widget.gameState.unlockedMissions.length;
+    final completedCount = widget.gameState.completedMissions.length;
+
+    return Column(
+      children: [
+        // Mode Banner
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          color: const Color(0xFF162130),
+          child: Row(
+            children: [
+              Icon(
+                widget.gameState.mode == 'unlocked'
+                    ? Icons.lock_open
+                    : (widget.gameState.mode == 'fresh'
+                          ? Icons.timeline
+                          : Icons.tune),
+                color: const Color(0xFF00E5FF),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
                   widget.gameState.mode == 'unlocked'
-                      ? Icons.lock_open
-                      : (widget.gameState.mode == 'fresh' ? Icons.timeline : Icons.tune),
-                  color: const Color(0xFF00E5FF),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.gameState.mode == 'unlocked'
-                        ? 'MODE: SANDBOX (ALL MISSIONS UNLOCKED)'
-                        : (widget.gameState.mode == 'fresh'
-                            ? 'MODE: STORY PROGRESSION (NATURAL UNLOCKS)'
+                      ? 'MODE: SANDBOX (ALL UNLOCKED)'
+                      : (widget.gameState.mode == 'fresh'
+                            ? 'MODE: STORY PROGRESSION'
                             : 'MODE: CUSTOM OVERRIDE'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                      color: Color(0xFF00E5FF),
-                    ),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                    color: Color(0xFF00E5FF),
                   ),
                 ),
-                Text(
-                  '$unlockedCount Unlocked • $completedCount Done',
-                  style: const TextStyle(fontSize: 11, color: Colors.white70),
-                ),
-              ],
-            ),
+              ),
+              Text(
+                '$unlockedCount Unlocked • $completedCount Done',
+                style: const TextStyle(fontSize: 11, color: Colors.white70),
+              ),
+            ],
           ),
+        ),
 
-          // Campaign Filters & Actions
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            color: const Color(0xFF0C121A),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: _selectedCampaignFilter,
-                      dropdownColor: const Color(0xFF162130),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      items: const [
-                        DropdownMenuItem(value: 'All', child: Text('All Campaigns (24 Missions)')),
-                        DropdownMenuItem(value: 'Montreal', child: Text('Montreal - VR Training')),
-                        DropdownMenuItem(value: 'Murder of Crows', child: Text('Italy - A Murder of Crows')),
-                        DropdownMenuItem(value: 'Crimson Sunset', child: Text('Forlì - A Crimson Sunset')),
-                        DropdownMenuItem(value: 'Bonus Contracts', child: Text('Bonus Contracts')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedCampaignFilter = val);
-                      },
-                    ),
+        // Campaign Filters & Actions
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          color: const Color(0xFF0C121A),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: _selectedCampaignFilter,
+                    dropdownColor: const Color(0xFF162130),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'All',
+                        child: Text('All Campaign Missions'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Montreal',
+                        child: Text('Montreal - VR Training'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Murder of Crows',
+                        child: Text('Italy - A Murder of Crows'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Crimson Sunset',
+                        child: Text('Forlì - A Crimson Sunset'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Bonus',
+                        child: Text('Bonus Contracts'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedCampaignFilter = val);
+                      }
+                    },
                   ),
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _unlockAllMissions,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00C853),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _unlockAllMissions,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00C853),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
                   ),
-                  child: const Text('Unlock All', style: TextStyle(fontSize: 11)),
                 ),
-                const SizedBox(width: 6),
-                ElevatedButton(
-                  onPressed: _resetAllMissions,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE53935),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: const Text('Unlock All', style: TextStyle(fontSize: 11)),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton(
+                onPressed: _resetAllMissions,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE53935),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
                   ),
-                  child: const Text('Reset All', style: TextStyle(fontSize: 11)),
                 ),
-              ],
-            ),
+                child: const Text('Reset All', style: TextStyle(fontSize: 11)),
+              ),
+            ],
           ),
+        ),
 
-          // Mission List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(10),
-              itemCount: filteredMissions.length,
-              itemBuilder: (ctx, idx) {
-                final m = filteredMissions[idx];
-                final isUnlocked = widget.gameState.isUnlocked(m.id);
-                final isCompleted = widget.gameState.isCompleted(m.id);
+        // Mission List
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(10),
+            itemCount: missions.length,
+            itemBuilder: (ctx, idx) {
+              final m = missions[idx];
+              final isUnlocked = widget.gameState.isUnlocked(m.id);
+              final isCompleted = widget.gameState.isCompleted(m.id);
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  color: isCompleted
-                      ? const Color(0xFF0F231D)
-                      : (isUnlocked ? const Color(0xFF121B27) : const Color(0xFF0A0F15)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                      color: isCompleted
-                          ? const Color(0xFF00E676).withOpacity(0.5)
-                          : (isUnlocked
-                              ? const Color(0xFF00E5FF).withOpacity(0.4)
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 5),
+                color: isCompleted
+                    ? const Color(0xFF0F231D)
+                    : (isUnlocked
+                          ? const Color(0xFF121B27)
+                          : const Color(0xFF0A0F15)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: isCompleted
+                        ? const Color(0xFF00E676).withValues(alpha: 0.5)
+                        : (isUnlocked
+                              ? const Color(0xFF00E5FF).withValues(alpha: 0.4)
                               : Colors.white10),
-                      width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isCompleted
+                                ? Icons.check_circle
+                                : (isUnlocked
+                                      ? Icons.play_circle_outline
+                                      : Icons.lock_outline),
+                            color: isCompleted
+                                ? const Color(0xFF00E676)
+                                : (isUnlocked
+                                      ? const Color(0xFF00E5FF)
+                                      : Colors.white30),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  m.title,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: isUnlocked
+                                        ? Colors.white
+                                        : Colors.white54,
+                                  ),
+                                ),
+                                Text(
+                                  '${m.campaign} • ${m.location}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        m.objective,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const Divider(height: 16, color: Colors.white12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Unlocked:',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isUnlocked
+                                      ? Colors.white70
+                                      : Colors.white38,
+                                ),
+                              ),
+                              Switch(
+                                value: isUnlocked,
+                                activeThumbColor: const Color(0xFF00E5FF),
+                                onChanged: (val) =>
+                                    _toggleMissionUnlocked(m.id, val),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                'Completed:',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isCompleted
+                                      ? const Color(0xFF00E676)
+                                      : Colors.white38,
+                                ),
+                              ),
+                              Switch(
+                                value: isCompleted,
+                                activeThumbColor: const Color(0xFF00E676),
+                                onChanged: (val) =>
+                                    _toggleMissionCompleted(m.id, val),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomMissionTab(List<MissionMeta> customList) {
+    final activeId = widget.gameState.activeCustomMissionId;
+
+    return Column(
+      children: [
+        // Dual-Slot Active Status Banner
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: const Color(0xFF162130),
+          child: Row(
+            children: [
+              const Icon(Icons.star, color: Color(0xFF00E5FF), size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'CUSTOM MISSIONS (${customList.length})',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF00E5FF),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      '🎮 Active mission playable on CONTRACTS & ITALY (A Murder of Crows)!',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF00E676)),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _tabController.animateTo(2),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Add New', style: TextStyle(fontSize: 11)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00E5FF),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // List or Empty View
+        Expanded(
+          child: customList.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.sports_esports_outlined,
+                          size: 64,
+                          color: Colors.white24,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No Custom Missions Installed',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Upload a custom mission JSON or use the Guide tab to build one with AI.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: Colors.white38),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          onPressed: () => _tabController.animateTo(2),
+                          icon: const Icon(Icons.file_upload),
+                          label: const Text('Go to Upload Tab'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00E5FF),
+                            foregroundColor: Colors.black,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: customList.length,
+                  itemBuilder: (ctx, idx) {
+                    final m = customList[idx];
+                    final isActive = activeId == m.id;
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      color: isActive
+                          ? const Color(0xFF102820)
+                          : const Color(0xFF132233),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: isActive
+                              ? const Color(0xFF00E676)
+                              : const Color(0xFF00E5FF).withValues(alpha: 0.6),
+                          width: isActive ? 2 : 1,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              margin: const EdgeInsets.only(top: 2, right: 8),
-                              child: isCompleted
-                                  ? const Icon(Icons.check_circle, color: Color(0xFF00E676), size: 18)
-                                  : Icon(
-                                      isUnlocked ? Icons.play_circle_outline : Icons.lock_outline,
-                                      color: isUnlocked ? const Color(0xFF00E5FF) : Colors.white30,
-                                      size: 18,
+                            // Header Row
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00E5FF)
+                                            .withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: const Color(0xFF00E5FF),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        '★ CUSTOM MISSION',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF00E5FF),
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
                                     ),
+                                    if (isActive) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF00E676)
+                                              .withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(0xFF00E676),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'ACTIVE IN GAME',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF00E676),
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.redAccent,
+                                    size: 20,
+                                  ),
+                                  tooltip: 'Delete Mission',
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => _deleteCustomMission(m.id),
+                                ),
+                              ],
                             ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            const SizedBox(height: 8),
+                            Text(
+                              m.title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              'ID: ${m.id} • ${m.location}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white54,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              m.objective,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Activation Control Box
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: isActive
+                                    ? const Color(0xFF00E676)
+                                          .withValues(alpha: 0.15)
+                                    : Colors.white.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isActive
+                                      ? const Color(0xFF00E676)
+                                      : Colors.white24,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    m.title,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: isUnlocked ? Colors.white : Colors.white54,
+                                  Expanded(
+                                    child: Text(
+                                      isActive
+                                          ? '👉 Ready! In AC Identity, tap CONTRACTS or open ITALY to play!'
+                                          : 'Tap "ACTIVATE" to load this into game Contracts & Italy.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: isActive
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: isActive
+                                            ? const Color(0xFF00E676)
+                                            : Colors.white70,
+                                      ),
                                     ),
                                   ),
-                                  Text(
-                                    '${m.campaign} • ${m.location}',
-                                    style: const TextStyle(fontSize: 11, color: Colors.white54),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    onPressed: () =>
+                                        _setActiveCustomMission(m.id),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isActive
+                                          ? const Color(0xFF00E676)
+                                          : const Color(0xFF00E5FF),
+                                      foregroundColor: Colors.black,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      minimumSize: Size.zero,
+                                    ),
+                                    child: Text(
+                                      isActive
+                                          ? 'PLAYING IN GAME'
+                                          : 'ACTIVATE TO PLAY',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          m.objective,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withOpacity(0.75),
-                            fontStyle: FontStyle.italic,
-                          ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUploadTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Card(
+            color: const Color(0xFF131D2A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFF00E5FF), width: 1.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(
+                        Icons.file_upload,
+                        color: Color(0xFF00E5FF),
+                        size: 24,
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'Upload Custom Mission',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                        const Divider(height: 16, color: Colors.white12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  'Unlocked:',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isUnlocked ? Colors.white70 : Colors.white38,
-                                  ),
-                                ),
-                                Switch(
-                                  value: isUnlocked,
-                                  activeColor: const Color(0xFF00E5FF),
-                                  onChanged: (val) => _toggleMissionUnlocked(m.id, val),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Text(
-                                  'Completed:',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isCompleted ? const Color(0xFF00E676) : Colors.white38,
-                                  ),
-                                ),
-                                Switch(
-                                  value: isCompleted,
-                                  activeColor: const Color(0xFF00E676),
-                                  onChanged: (val) => _toggleMissionCompleted(m.id, val),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Select your mission JSON or binary file to compile and activate in game.',
+                    style: TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 1. Mission ID
+                  const Text(
+                    'Mission ID:',
+                    style: TextStyle(
+                      color: Color(0xFF00E5FF),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
                     ),
                   ),
-                );
-              },
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _uploadIdController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. story_custom_01',
+                      hintStyle: const TextStyle(color: Colors.white30),
+                      filled: true,
+                      fillColor: Colors.black38,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF00E5FF)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 2. Mission Title
+                  const Text(
+                    'Mission Title:',
+                    style: TextStyle(
+                      color: Color(0xFF00E5FF),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _uploadTitleController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Shadows over Florence',
+                      hintStyle: const TextStyle(color: Colors.white30),
+                      filled: true,
+                      fillColor: Colors.black38,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white24),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF00E5FF)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // 3. Upload File Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: _pickAndUploadMission,
+                      icon: const Icon(Icons.file_upload, size: 20),
+                      label: const Text(
+                        'Upload File',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00E5FF),
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Optional Manual Save & Activate
+                  SizedBox(
+                    width: double.infinity,
+                    height: 42,
+                    child: OutlinedButton.icon(
+                      onPressed: _manualSaveAndActivate,
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save & Activate Manually'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF00E5FF),
+                        side: const BorderSide(color: Color(0xFF00E5FF)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGuideTab() {
+    const aiPromptText =
+        "You are the Senior Mission Director for Assassin's Creed Identity (v2.8.2). "
+        "Please read the attached SKILL.md and INSTRUCTIONS.md. "
+        "Interview me step-by-step: ask me for the game slot, location, weather/mood, objective (kill, protect, follow noble/king/maid on rooftops), and enemy targets. "
+        "Once we agree, output a valid custom mission JSON matching the specification.";
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Download Card
+          Card(
+            color: const Color(0xFF132233),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(color: Color(0xFF00E5FF), width: 1.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(
+                        Icons.download_for_offline,
+                        color: Color(0xFF00E5FF),
+                        size: 24,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'AI Skill, Instructions & Assets PDF Package',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Export the complete creator toolkit to your device Downloads folder: SKILL.md, INSTRUCTIONS.md, AC_IDENTITY_ASSETS_GUIDE.pdf, CUSTOM_MISSION_SPEC.md, and sample_mission.json.',
+                    style: TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _downloadSkillFiles,
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text(
+                            'Download Package',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00E5FF),
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => widget.gameChannel.invokeMethod(
+                            'shareSkillFiles',
+                          ),
+                          icon: const Icon(Icons.share, size: 16),
+                          label: const Text(
+                            'Share / Open',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00E676),
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(
+                          const ClipboardData(text: aiPromptText),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'AI Interview Prompt copied to clipboard!',
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 16),
+                      label: const Text(
+                        'Copy AI Prompt to Clipboard',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF00E5FF),
+                        side: const BorderSide(color: Color(0xFF00E5FF)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // How to Build Section
+          _buildGuideSectionCard(
+            title: 'HOW TO BUILD MISSIONS WITH AI',
+            icon: Icons.psychology,
+            color: const Color(0xFF00E5FF),
+            items: const [
+              '1. Upload SKILL.md and INSTRUCTIONS.md to your AI chat (ChatGPT, Claude, Gemini).',
+              '2. The AI will interview you step-by-step: asks for slot, location, time/mood, and objectives.',
+              '3. Objectives include Assassination, Protection (King, Noble, Maid), or Rooftop Tailing.',
+              '4. The AI outputs a verified mission.json file.',
+              '5. In the Upload tab, enter ID/Title and select the file -> Playable under Contracts & Italy!',
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Section 1: Persons, Characters & Roles
+          _buildGuideSectionCard(
+            title: '1. PERSONS, CHARACTERS, VIPS & ENEMIES',
+            icon: Icons.people,
+            color: Colors.amberAccent,
+            items: const [
+              '• King / Sovereign: Royal monarch requiring escort or high-profile target.',
+              '• Maid / Servant: Vulnerable domestic informant carrying secret keys.',
+              '• Florentine Noble: Wealthy Renaissance patron or Borgia collaborator.',
+              '• Courtesan: Distracts Templar guard sentries on street corners.',
+              '• Thief / Informant: Agile runner who spots rooftop archers and routes.',
+              '• Friar / Monk: Walking in procession; ideal for crowd blending.',
+              '• Borgia Captain (Special_Captain_01): Heavy plate armor, broadsword combatant.',
+              '• Templar Knight (Guard_Melee_01): Sword and shield frontline infantry.',
+              '• Crossbow Sniper (Guard_Ranged_01): Stationed on rooftops with long-range sight.',
+              '• Heavy Brute (Guard_Brute_01): Massive two-handed axe; blocks frontal attacks.',
+              '• Agile Scout (Guard_Agile_01): Fast runner with stiletto daggers; scales walls.',
+              '• Corrupt Inquisitor (Special_Doctor_01): Secretive Templar mastermind.',
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Section 2: Animals, Traversal & Rides
+          _buildGuideSectionCard(
+            title: '2. ANIMALS, RIDES & TRAVERSAL PROPS',
+            icon: Icons.pets,
+            color: Colors.greenAccent,
+            items: const [
+              '• Italian Horses & Wagons: Street obstacles, stables, and carts in piazzas.',
+              '• Guard Dogs: Sniff out hidden assassins in haystacks; bark to alert sentries.',
+              '• Pigeons & Birds: Perched on wooden vantage beams for Leap of Faith points.',
+              '• Haystacks: Leap of Faith landing zones and instant stealth hiding spots.',
+              '• Sitting Benches: Sit among citizens to drop guard suspicion meter to zero.',
+              '• Wooden Beams & Ziplines: Rooftop highway connections across buildings.',
+              '• Scaffolding & Catwalks: Elevated vantage points for aerial assassinations.',
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Section 3: Places & Historical Maps
+          _buildGuideSectionCard(
+            title: '3. HISTORICAL MAPS & LOCATIONS',
+            icon: Icons.location_on,
+            color: Colors.orangeAccent,
+            items: const [
+              '• Firenze Palazzo della Signoria (Firenze_Palazzo): Open civic plaza, Palazzo Vecchio, terracotta roofs.',
+              '• Firenze Santa Croce (Firenze_SantaCroce): Church square, cloister arcades, bell tower, market stalls.',
+              '• Roma Colosseo (Roma_Coloseum): Ancient Roman amphitheater, ruins, gladiatorial arena, sunlit arches.',
+              '• Monteriggioni Villa Auditore (Monteriggioni): Tuscan fortress village, ramparts, courtyard gardens.',
+              '• Forli Romagna Stronghold (Forli): Waterways, marshland moat, imposing stone citadel battlements.',
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Section 4: Atmospheres & Moods
+          _buildGuideSectionCard(
+            title: '4. LIGHTING & ATMOSPHERES (MOODS)',
+            icon: Icons.wb_sunny,
+            color: Colors.yellowAccent,
+            items: const [
+              '• Daytime: Bright Italian sunlight, high guard visibility, bustling piazzas.',
+              '• Dusk: Golden hour sunset, lengthening shadows, lantern-lit streets.',
+              '• Nighttime: Deep shadows, torchlit alleys, optimal for stealth assassinations.',
+              '• Foggy: Thick morning mist, reduced guard sightlines, tense atmosphere.',
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Section 5: Mission Types & Rooftop Stealth
+          _buildGuideSectionCard(
+            title: '5. MISSION TYPES & ROOFTOP TAILING RULES',
+            icon: Icons.sports_kabaddi,
+            color: Colors.redAccent,
+            items: const [
+              '• Assassinate / Eliminate: Take down high-value Templar commanders and captains.',
+              '• Protect / Escort: Safeguard a King, Noble, or Maid through hostile streets.',
+              '• Rooftop Tailing Distance: Maintain 15 to 40 meters distance from target.',
+              '• Rooftop Traversal: Leap across beams and chimneys to maintain sight from above.',
+              '• Detection Contingency: If guard indicator turns YELLOW/RED:',
+              '    a) Break line of sight and dive into a haystack or sit on a bench.',
+              '    b) Or perform a rapid silent assassination on the alerted sentry before alarm rings!',
+              '• Infiltrate & Steal: Sneak into guarded vaults undetected to retrieve Borgia codex letters.',
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuideSectionCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<String> items,
+  }) {
+    return Card(
+      color: const Color(0xFF131D2A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final item in items) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  item,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white70,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -42,6 +42,8 @@ internal static class Program
         int port = 8080;
         bool selfTest = false;
         string exportDir = null;
+        string buildMissionJson = null;
+        string buildMissionOut = null;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--cache" && i + 1 < args.Length) _cacheDir = args[++i];
@@ -50,6 +52,14 @@ internal static class Program
             else if (args[i] == "--host" && i + 1 < args.Length) Host = args[++i];
             else if (args[i] == "--self-test") selfTest = true;
             else if (args[i] == "--export-companion" && i + 1 < args.Length) exportDir = args[++i];
+            else if (args[i] == "--build-mission" && i + 1 < args.Length)
+            {
+                buildMissionJson = args[++i];
+                if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+                {
+                    buildMissionOut = args[++i];
+                }
+            }
         }
         CdnUrl = "http://" + Host + ":" + port + "/cdn/ACID_2.8.2_373";
         ApiUrl = "http://" + Host + ":" + port + "/acier/v1/api";
@@ -60,6 +70,14 @@ internal static class Program
         LoadOrCreateProfile();
         RepairProfile();
         Statics();
+
+        if (!string.IsNullOrEmpty(buildMissionJson))
+        {
+            string outDir = buildMissionOut ?? Path.GetDirectoryName(buildMissionJson);
+            if (string.IsNullOrEmpty(outDir)) outDir = ".";
+            BuildCustomMissionFromJson(buildMissionJson, outDir);
+            return 0;
+        }
 
         if (!string.IsNullOrEmpty(exportDir))
         {
@@ -2100,6 +2118,142 @@ internal static class Program
         catJson.AppendLine("}");
         File.WriteAllText(Path.Combine(outDir, "catalogue.json"), catJson.ToString());
         Console.WriteLine($"Exported catalogue.json with {Catalogue.Count} assets");
+    }
+
+    private static void BuildCustomMissionFromJson(string jsonPath, string outDir)
+    {
+        if (!File.Exists(jsonPath))
+        {
+            Console.WriteLine($"Error: Mission JSON not found at {jsonPath}");
+            return;
+        }
+
+        string json = File.ReadAllText(jsonPath);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        string missionId = root.TryGetProperty("missionId", out var midEl) ? midEl.GetString() : "story_custom_001";
+        string era = root.TryGetProperty("era", out var eraEl) ? eraEl.GetString() : "Italy";
+        string region = root.TryGetProperty("region", out var regEl) ? regEl.GetString() : "Monteriggioni";
+        string mood = root.TryGetProperty("mood", out var moodEl) ? moodEl.GetString() : "Daytime";
+        string scene = root.TryGetProperty("scene", out var scEl) ? scEl.GetString() : "MonteRiggioni_DayTime";
+        string locationName = root.TryGetProperty("locationName", out var locEl) ? locEl.GetString() : "Monteriggioni";
+
+        Type eraType = TypeOf("AcierProtocol.EEra");
+        Type regionType = TypeOf("AcierProtocol.ERegion");
+        Type moodType = TypeOf("AcierProtocol.EMood");
+
+        if (!Enum.IsDefined(eraType, era)) era = "Italy";
+        if (!Enum.IsDefined(regionType, region)) region = "Monteriggioni";
+        if (!Enum.IsDefined(moodType, mood)) mood = "Daytime";
+
+        float playerX = 0f, playerY = 0.5f, playerZ = 0f, playerRot = 0f;
+        if (root.TryGetProperty("playerSpawn", out var spEl))
+        {
+            if (spEl.TryGetProperty("x", out var xEl)) playerX = xEl.GetSingle();
+            if (spEl.TryGetProperty("y", out var yEl)) playerY = yEl.GetSingle();
+            if (spEl.TryGetProperty("z", out var zEl)) playerZ = zEl.GetSingle();
+            if (spEl.TryGetProperty("rot", out var rEl)) playerRot = rEl.GetSingle();
+        }
+
+        string objectiveKind = "Kill";
+        string goalType = "Kill";
+        int descriptionLocaId = 3430;
+        if (root.TryGetProperty("objectiveKind", out var objKindEl))
+        {
+            objectiveKind = objKindEl.GetString();
+            goalType = objectiveKind == "Interaction" ? "NpcInteraction" : "Kill";
+        }
+
+        var npcList = new List<(string name, long id, string guid, float x, float y, float z, float rot, bool isEnemy)>();
+        var targetIdList = new List<long>();
+        long currentId = 101L;
+
+        if (root.TryGetProperty("targets", out var targetsEl) && targetsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var t in targetsEl.EnumerateArray())
+            {
+                string name = t.TryGetProperty("name", out var nEl) ? nEl.GetString() : $"Target_{currentId}";
+                string guid = t.TryGetProperty("guid", out var gEl) ? gEl.GetString() : "ntt_bd49bc5f";
+                float x = t.TryGetProperty("x", out var xEl) ? xEl.GetSingle() : 0f;
+                float y = t.TryGetProperty("y", out var yEl) ? yEl.GetSingle() : 0.5f;
+                float z = t.TryGetProperty("z", out var zEl) ? zEl.GetSingle() : 10f;
+                float rot = t.TryGetProperty("rot", out var rEl) ? rEl.GetSingle() : 180f;
+                bool isTarget = !t.TryGetProperty("isTarget", out var itEl) || itEl.GetBoolean();
+
+                npcList.Add((name, currentId, guid, x, y, z, rot, isTarget));
+                if (isTarget)
+                {
+                    targetIdList.Add(currentId);
+                }
+                currentId++;
+            }
+        }
+
+        if (targetIdList.Count == 0)
+        {
+            targetIdList.Add(101L);
+            npcList.Add(("Default_Target", 101L, "ntt_bd49bc5f", 0f, 0.5f, 10f, 180f, true));
+        }
+
+        int targetCount = targetIdList.Count;
+        long[] targetIds = targetIdList.ToArray();
+        var npcs = npcList.ToArray();
+
+        object file = AssembleMissionFile(missionId, era, region, mood, scene, locationName, playerX, playerY, playerZ, playerRot, targetIds, npcs, descriptionLocaId, objectiveKind, targetCount);
+        object goals = CreateMissionGoals(targetCount, descriptionLocaId, goalType);
+
+        Directory.CreateDirectory(outDir);
+
+        // 1. openMission_{missionId}.bin
+        object openResp = New("AcierProtocol.Response");
+        object opened = New("AcierProtocol.OpenMissionResponse");
+        object ticket = New("AcierProtocol.MissionToken");
+        Set(ticket, "token", "offline-mission");
+        Set(ticket, "missionId", missionId);
+        Set(ticket, "assassinId", "acid-offline-assassin");
+        Set(ticket, "hirelingId", "hireling-1");
+        Set(ticket, "missionFile", file);
+        Set(ticket, "missionGoals", goals);
+        Set(ticket, "eliteMission", false);
+        Set(opened, "missionToken", ticket);
+        Set(openResp, "openMissionResponse", opened);
+        using (var fs = File.Create(Path.Combine(outDir, $"openMission_{missionId}.bin")))
+        {
+            _serialize.Invoke(_serializer, new object[] { fs, openResp });
+        }
+
+        // 2. getMissionInfo_{missionId}.bin
+        long coins = 800L, xp = 1500L;
+        if (root.TryGetProperty("rewards", out var rewEl))
+        {
+            if (rewEl.TryGetProperty("coins", out var cEl)) coins = cEl.GetInt64();
+            if (rewEl.TryGetProperty("xp", out var xEl)) xp = xEl.GetInt64();
+        }
+        object infoResp = New("AcierProtocol.Response");
+        object info = New("AcierProtocol.GetMissionInfoResponse");
+        Set(info, "missionRewardPreview", MissionReward(coins, xp));
+        Set(info, "missionGoals", goals);
+        Set(infoResp, "getMissionInfoResponse", info);
+        using (var fs = File.Create(Path.Combine(outDir, $"getMissionInfo_{missionId}.bin")))
+        {
+            _serialize.Invoke(_serializer, new object[] { fs, infoResp });
+        }
+
+        // 3. endMission_{missionId}.bin
+        object endRespObj = New("AcierProtocol.Response");
+        object ended = New("AcierProtocol.EndMissionResponse");
+        object endReward = MissionReward(coins, xp);
+        Set(endReward, "entitlements", new string[] { $"ntt_story_reward_{missionId}", $"ntt_story_challenge_{missionId}" });
+        Set(ended, "missionReward", endReward);
+        Set(endRespObj, "endMissionResponse", ended);
+        Set(endRespObj, "userProfile", _profile);
+        using (var fs = File.Create(Path.Combine(outDir, $"endMission_{missionId}.bin")))
+        {
+            _serialize.Invoke(_serializer, new object[] { fs, endRespObj });
+        }
+
+        Console.WriteLine($"Successfully built custom mission '{missionId}' into {outDir}!");
     }
 
     private static void SelfTest()

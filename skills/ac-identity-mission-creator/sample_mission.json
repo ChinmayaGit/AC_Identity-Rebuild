@@ -1,0 +1,44 @@
+{
+  "missionId": "story_custom_firenze_spy",
+  "title": "Shadows over the Signoria",
+  "campaign": "Italy - A Murder of Crows",
+  "region": "Firenze_Palazzo",
+  "mood": "Nighttime",
+  "scene": "Firenze_palazzo_nighttime",
+  "locationName": "Firenze",
+  "briefing": "A Borgia spy has infiltrated Florence under cover of darkness to pass stolen secrets to Rome. Find and eliminate him before he escapes.",
+  "objective": "Assassinate the Borgia Spy in the Piazza della Signoria.",
+  "playerSpawn": {
+    "x": -6.0,
+    "y": 0.5,
+    "z": -6.0,
+    "rot": 0.0
+  },
+  "targets": [
+    {
+      "name": "Borgia_Infiltrator_01",
+      "archetype": "Special_Captain_01",
+      "guid": "ntt_bd49bc5f",
+      "x": 2.0,
+      "y": 0.5,
+      "z": 12.0,
+      "rot": 180.0,
+      "isTarget": true
+    },
+    {
+      "name": "Borgia_Bodyguard_01",
+      "archetype": "Guard_Brute_01",
+      "guid": "ntt_6d68817b",
+      "x": 4.0,
+      "y": 0.5,
+      "z": 14.0,
+      "rot": 180.0,
+      "isTarget": false
+    }
+  ],
+  "rewards": {
+    "coins": 800,
+    "xp": 1500
+  }
+}
+
