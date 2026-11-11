@@ -83,6 +83,36 @@ def patch_cache(data: bytes) -> bytes:
     return bytes(data)
 
 
+def patch_dex(data: bytes) -> bytes:
+    import struct
+    import hashlib
+    import zlib
+    dex = bytearray(data)
+    code_off = 0x476044
+    target = bytes.fromhex("1200390903000e00")
+    if dex[code_off + 16:code_off + 16 + len(target)] != target:
+        raise SystemExit("classes.dex permission check site not found")
+    # Bypass Unity's deprecated android.app.Fragment permission request which crashes on Android 14+
+    # (Fragment null must be a public static class to be properly recreated from instance state).
+    # v10 is the Runnable argument (Unity startup callback).
+    # Replace the initial 4 code units (8 bytes: const/4 v0, #0; if-nez v9, +3; return-void)
+    # with:
+    # 72 10 d5 d4 0a 00 (invoke-interface/range {v10}, Ljava/lang/Runnable;->run:()V) [3 code units]
+    # 0e 00 (return-void) [1 code unit]
+    # Exactly 4 code units (8 bytes) perfectly aligns with Try 0 at pc 4.
+    patch = bytes.fromhex("7210d5d40a000e00")
+    dex[code_off + 16:code_off + 16 + len(patch)] = patch
+
+    # Recompute SHA1 checksum
+    sha1 = hashlib.sha1(dex[32:]).digest()
+    dex[12:32] = sha1
+
+    # Recompute Adler32 checksum
+    adler = zlib.adler32(dex[12:]) & 0xffffffff
+    dex[8:12] = struct.pack("<I", adler)
+    return bytes(dex)
+
+
 def main() -> None:
     if len(OLD_URL) != len(NEW_URL):
         raise SystemExit(f"url length changed {len(OLD_URL)} -> {len(NEW_URL)}")
@@ -100,12 +130,23 @@ def main() -> None:
             if info.filename.startswith("META-INF/"):
                 continue
             payload = source.read(info.filename)
-            if info.filename == ASSET:
+            if info.filename == "AndroidManifest.xml":
+                manifest_bytes = bytearray(payload)
+                # Patch targetSdkVersion from 23 to 26 (Android 8.0 Oreo):
+                # 1. Bypasses the minimum SDK install block on Android 14/15/16 (requires >= 24)
+                # 2. Fully allows cleartext HTTP (http://127.0.0.1:8080) by default (Android only blocked it in API 28+)
+                target_offset = manifest_bytes.find(b"\x08\x00\x00\x10\x17\x00\x00\x00")
+                if target_offset != -1:
+                    manifest_bytes[target_offset + 4] = 26
+                payload = bytes(manifest_bytes)
+            elif info.filename == ASSET:
                 payload = blob
             elif info.filename == DLL:
                 payload = dll
             elif info.filename == CACHE:
                 payload = cache
+            elif info.filename == "classes.dex":
+                payload = patch_dex(payload)
             info.flag_bits &= ~0x8
             dest.writestr(info, payload)
 

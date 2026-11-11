@@ -1,0 +1,36 @@
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# Large archives (GameData_Cache.zip is ~719MB, exceeds GitHub 100MB hard limit)
+*.zip
+*.tar.gz
+*.7z
+
+# .NET build output
+**/bin/
+**/obj/
+*.suo
+*.user
+
+# Flutter / Android build output
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+**/build/
+**/.gradle/
+**/local.properties
+**/captures/
+
+# Temporary files & logs
+*.log
+*.tmp

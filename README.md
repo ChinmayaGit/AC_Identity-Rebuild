@@ -4,26 +4,38 @@ A comprehensive preservation and offline emulation project for **Assassin's Cree
 
 ---
 
+## 📌 Roadmap & Pending Tasks
+
+The following major roadmap milestones are currently pending and under active planning / progress:
+
+- [ ] **iOS / Mac build** *(considering standalone Windows / Linux builds as well)*
+- [ ] **64-bit processor converter / translator** so it can run directly on pure 64-bit devices (Google Pixel 7/8/9, Snapdragon 8 Gen 3/4) without VM containers
+- [ ] **Fix & improve custom mission script** (need some improvement, currently in progress)
+- [ ] **Create Ubisoft community campaign / petition** so they can officially relaunch or remaster the game
+
+---
+
 ## Table of Contents
-1. [Project Overview](#project-overview)
-2. [Reverse Engineering & Architecture](#reverse-engineering--architecture)
-3. [How the Online Bypasses Work](#how-the-online-bypasses-work)
+1. [Roadmap & Pending Tasks](#-roadmap--pending-tasks)
+2. [Project Overview](#project-overview)
+3. [Reverse Engineering & Architecture](#reverse-engineering--architecture)
+4. [How the Online Bypasses Work](#how-the-online-bypasses-work)
    - [1. Discovery & Network Redirection](#1-discovery--network-redirection)
    - [2. Protocol Buffers & Server Emulation](#2-protocol-buffers--server-emulation)
    - [3. CDN Asset & Cache Replication](#3-cdn-asset--cache-replication)
    - [4. ColorOS / Hans Background Freezer Immunity](#4-coloros--hans-background-freezer-immunity)
    - [5. Mission Progression & Lock Bypass](#5-mission-progression--lock-bypass)
    - [6. Firenze Spawn Collision Fix](#6-firenze-spawn-collision-fix)
-4. [Companion Server Features](#companion-server-features)
+5. [Companion Server Features](#companion-server-features)
    - [Authentic AC Launcher Icon](#authentic-ac-launcher-icon)
    - [80/20 Server Status & Instant Toggle](#8020-server-status--instant-toggle)
    - [Direct Game Launcher](#direct-game-launcher)
    - [Game Access & Level Progression Manager](#game-access--level-progression-manager)
    - [Custom Mission Creator & Uploader](#custom-mission-creator--uploader)
-5. [Installation & Setup](#installation--setup)
+6. [Installation & Setup](#installation--setup)
    - [Single-Device Offline Play (Recommended)](#single-device-offline-play-recommended)
    - [PC Host Mode (Alternative)](#pc-host-mode-alternative)
-6. [Custom Missions & Level Creation](#custom-missions--level-creation)
+7. [Custom Missions & Level Creation](#custom-missions--level-creation)
 
 ---
 

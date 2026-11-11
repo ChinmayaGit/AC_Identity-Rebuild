@@ -29,13 +29,26 @@ android {
         versionName = flutter.versionName
     }
 
-    buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "offline"
+            keyAlias = "acid"
+            keyPassword = "offline"
+            enableV1Signing = true
+            enableV2Signing = true
         }
     }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+}
+
+dependencies {
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
 
 kotlin {

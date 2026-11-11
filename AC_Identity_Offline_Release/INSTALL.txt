@@ -1,0 +1,194 @@
+================================================================================
+          ASSASSIN'S CREED IDENTITY (v2.8.2) — OFFLINE EDITION
+================================================================================
+
+This package contains everything needed to play Assassin's Creed Identity 
+100% offline without Ubisoft servers, account logins, or active internet.
+
+PACKAGE CONTENTS:
+-----------------
+1. ACIdentity_CompanionServer.apk  - Local offline server & mission manager
+2. ACIdentity_Game.apk             - Patched game client (targetSdk 26 + A16 fix)
+3. GameData_Cache.zip              - Complete 1.5 GB 3D game assets & audio (104 files)
+4. localstorage_unlocked.json       - Complete unlocked campaign profile
+5. install.bat                     - 1-Click automated installer for Windows (ADB)
+6. install.sh                      - 1-Click automated installer for macOS/Linux (ADB)
+7. INSTALL.txt                     - This guide
+
+
+================================================================================
+                   PART 1: HOW TO INSTALL & PLAY
+================================================================================
+
+METHOD A: 100% ON-DEVICE INSTALL (RECOMMENDED - NO PC NEEDED)
+-------------------------------------------------------------
+1. Download or copy this folder to your phone (e.g. into your "Download" folder).
+2. Install both APKs using your phone's File Manager:
+   - Tap and install "ACIdentity_CompanionServer.apk".
+   - Tap and install "ACIdentity_Game.apk".
+   * Note: If Android prompts "Install unknown apps" or Play Protect warning, 
+     allow installation. Both APKs are signed with persistent release keys.
+3. Open the "AC Identity Server" app on your phone.
+4. On the home screen, you will see the "GAME DATA CACHE" card:
+   - If "GameData_Cache.zip" is in your Downloads, tap "1-Tap Install".
+   - Or tap "Select ZIP" / "Select Folder" and pick GameData_Cache.zip.
+   - The app will automatically extract all 104 game files (~1.5 GB) into 
+     /Android/data/com.ubisoft.assassinscreed.identity/files/cache/ with a 
+     live progress bar.
+5. Once the badge turns green ("GAME CACHE: READY (104/104 FILES)"):
+   - Ensure the server banner shows "SERVER ONLINE" (Port 8080).
+   - Tap "Launch Game" (or open Assassin's Creed Identity from your home screen).
+6. If a Google Play Games popup appears on first boot, tap "Cancel" or "Continue" 
+   (or your phone's Back button) to enter the 3D Animus main menu!
+
+
+METHOD B: 1-CLICK AUTOMATED USB INSTALL VIA PC
+----------------------------------------------
+1. Enable USB Debugging on your phone:
+   - Settings > About Phone > Tap "Build Number" 7 times to enable Developer Options.
+   - Settings > System > Developer Options > Enable "USB Debugging".
+2. Connect your phone to your PC via USB cable.
+3. Run the installer:
+   - Windows: Double-click "install.bat".
+   - macOS / Linux: Open Terminal in this folder and run:
+       chmod +x install.sh && ./install.sh
+4. The script automatically installs both APKs, pushes all 104 cache files, and 
+   configures offline storage.
+5. Open "AC Identity Server" on your phone, verify it is running, and tap "Launch Game".
+
+
+================================================================================
+    PART 2: IF YOU HAVE A 64-BIT-ONLY PHONE (PIXEL 7/8/9, SNAPDRAGON 8 GEN 3/4)
+================================================================================
+
+If your phone refuses to install the game with "App not installed" or 
+"INSTALL_FAILED_NO_MATCHING_ABIS", your phone is a pure 64-bit device.
+
+WHY THIS HAPPENS:
+-----------------
+Starting with Google Pixel 7 (Tensor G2/G3/G4) and newer chipsets like Snapdragon 
+8 Gen 3 / Gen 4, ARM and Google physically eliminated the 32-bit CPU hardware execution 
+state from the silicon. Assassin's Creed Identity was originally authored by Ubisoft 
+as a 32-bit ARM (armeabi-v7a) title. Because the physical chip lacks a 32-bit instruction 
+decoder, pure 64-bit Android OS builds block 32-bit binaries at the kernel level.
+
+HOW TO PLAY ON PURE 64-BIT DEVICES (60 FPS WITH GPU PASS-THROUGH):
+------------------------------------------------------------------
+You can easily run the game with full 3D hardware acceleration using a lightweight, 
+isolated 32-bit virtual container:
+
+1. Download "VPhoneOS" (Free from the official site / Google Play Store:
+   https://play.google.com/store/apps/details?id=com.vphoneos.emulator) 
+   or "VMOS" (https://www.vmos.com/).
+2. Open VPhoneOS. It launches just like a standard mobile app and provides a clean 
+   32-bit Android environment with full direct GPU pass-through.
+3. Inside VPhoneOS, tap "Import" or "File Transfer":
+   - Select "ACIdentity_CompanionServer.apk"
+   - Select "ACIdentity_Game.apk"
+   - Select "GameData_Cache.zip" (or the GameData_Cache folder)
+4. Open the Companion Server inside VPhoneOS, tap "1-Tap Install" to extract 
+   the cache, and verify the server is running.
+5. Launch "Assassin's Creed Identity" inside VPhoneOS. The game runs smoothly at 
+   60 FPS with native touch controls, full audio, and 3D graphics!
+
+
+================================================================================
+               PART 3: HOW TO BUILD YOUR OWN CUSTOM MISSIONS
+================================================================================
+
+The Companion Server includes a complete Custom Mission Engine allowing you 
+to create, inject, and play entirely new assassination contracts and story 
+levels with custom objectives, enemy types, locations, and narrative setups!
+
+HOW THE CUSTOM MISSION SYSTEM WORKS:
+------------------------------------
+The companion server serves mission descriptors directly to the game via the 
+GetStatics and OpenMission APIs. Custom missions are authored as simple JSON files 
+defining:
+- Mission ID & Name
+- Location: Firenze (Santa Croce), Monteriggioni, Forli, or Colosseum (Rome)
+- Atmosphere & Time of Day: Day, Sunset, Night, Fog, or Rain
+- Target Archetypes: Corrupt Officials, Borgia Captains, Crow Leaders, Couriers
+- Objectives: Assassinate Targets, Tail / Shadow, Loot Chests, Infiltrate Undetected
+- Time Limits & Civilian Casualties Allowed
+- Custom Rewards: XP, Coins, and Credits
+
+METHOD 1: USING THE BUILT-IN AI MISSION CREATOR (EASIEST)
+--------------------------------------------------------
+1. Open "AC Identity Server" on your phone.
+2. Tap the "Guide & Assets" tab at the bottom.
+3. Tap "Copy AI Prompt".
+4. Open any AI model of your choice (ChatGPT, Claude, Gemini, DeepSeek, etc.) 
+   and paste the prompt.
+5. Describe what kind of mission you want, for example:
+   "Create a night stealth assassination in the Florence cathedral where an 
+   inquisitor is burning manuscripts, with a 3-minute time limit and zero detection allowed."
+6. The AI will output a valid JSON mission file following the official specification.
+7. Save the output as a ".json" file (e.g. "my_mission.json").
+
+METHOD 2: IMPORTING & PLAYING YOUR CUSTOM MISSION
+------------------------------------------------
+1. In "AC Identity Server", tap the "Custom Missions" tab (or "Upload Hub").
+2. Tap "Upload Mission File (.json)" and select your custom mission JSON file.
+3. The Companion Server validates the mission syntax and registers it instantly 
+   into the mission database.
+4. Toggle "Active" on your mission card.
+5. Launch the game, head to "Contracts" or select the location on the Italy map.
+6. Your custom mission will appear ready to play with all custom objectives, 
+   cutscenes, targets, and rewards!
+
+SAMPLE CUSTOM MISSION JSON STRUCTURE:
+-------------------------------------
+{
+  "missionId": "custom_001",
+  "title": "A Healer's Justice",
+  "description": "Hunt down a corrupt apothecary selling poisoned remedies in Florence.",
+  "location": "Firenze",
+  "timeOfDay": "Night",
+  "weather": "Fog",
+  "difficulty": 3,
+  "timeLimitSeconds": 240,
+  "maxDetectionAllowed": 0,
+  "objectives": [
+    {
+      "type": "assassinate",
+      "targetName": "Doctor Malfatto",
+      "targetType": "CrowCaptain",
+      "count": 1
+    },
+    {
+      "type": "loot",
+      "targetName": "Medical Ledger",
+      "targetType": "BorgiaChest",
+      "count": 2
+    }
+  ],
+  "rewards": {
+    "xp": 1200,
+    "coins": 3500,
+    "credits": 50
+  }
+}
+
+
+================================================================================
+                          PART 4: TROUBLESHOOTING
+================================================================================
+
+1. BLACK SCREEN ON STARTUP:
+   - Ensure the Companion Server is running before opening the game.
+   - Verify all 104 cache files are installed. The companion app should show:
+     "GAME CACHE: READY (104/104 FILES)".
+   - Both APKs in this release include the Android 14/15/16 permission fragment 
+     fix, preventing the common modern Android startup freeze.
+
+2. GOOGLE PLAY GAMES PROMPT:
+   - If a Google Play Games overlay covers the screen on first launch, tap 
+     "Cancel" or press your device's Back button to proceed to the main menu.
+
+3. PHONE FREEZING / CLOSING THE SERVER IN BACKGROUND:
+   - On aggressive battery savers (ColorOS / MIUI / HyperOS), grant the AC 
+     Identity Server app "Battery > Unrestricted" and "Autostart / Allow background activity".
+
+Enjoy playing Assassin's Creed Identity 100% offline!
+================================================================================

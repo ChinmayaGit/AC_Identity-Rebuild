@@ -685,7 +685,8 @@ class ServerScreen extends StatefulWidget {
   State<ServerScreen> createState() => _ServerScreenState();
 }
 
-class _ServerScreenState extends State<ServerScreen> {
+class _ServerScreenState extends State<ServerScreen>
+    with WidgetsBindingObserver {
   static const _gameChannel = MethodChannel('com.acid.server/game');
   HttpServer? _server;
   bool _isRunning = false;
@@ -694,11 +695,35 @@ class _ServerScreenState extends State<ServerScreen> {
   String _activeMissionId = 'story_tutorial_01';
   GameAccessState _gameState = GameAccessState();
 
+  Map<String, dynamic>? _cacheStatus;
+  bool _isInstallingCache = false;
+  String _cacheInstallMessage = '';
+  double _cacheInstallProgress = 0.0;
+  int _cacheFilesCopied = 0;
+  int _cacheTotalFiles = 104;
+
   static const List<String> _candidateCacheDirs = [
     '/sdcard/Android/data/com.acid.server.companion_server/files/cache',
     '/sdcard/ACIdentity_Cache',
     '/sdcard/Android/data/com.ubisoft.assassinscreed.identity/files/cache',
   ];
+
+  List<String> get _allCandidateCacheDirs {
+    final list = <String>[];
+    final own = _cacheStatus?['ownCachePath'] as String?;
+    final target = _cacheStatus?['targetPath'] as String?;
+    if (own != null && own.isNotEmpty) list.add(own);
+    if (target != null && target.isNotEmpty) list.add(target);
+    list.addAll([
+      '/sdcard/Android/data/com.acid.server.companion_server/files/cache',
+      '/storage/emulated/0/Android/data/com.acid.server.companion_server/files/cache',
+      '/sdcard/ACIdentity_Cache',
+      '/storage/emulated/0/ACIdentity_Cache',
+      '/sdcard/Android/data/com.ubisoft.assassinscreed.identity/files/cache',
+      '/storage/emulated/0/Android/data/com.ubisoft.assassinscreed.identity/files/cache',
+    ]);
+    return list.toSet().toList();
+  }
 
   static const List<String> _candidateCustomDirs = [
     '/sdcard/Android/data/com.acid.server.companion_server/files/custom_missions',
@@ -715,11 +740,264 @@ class _ServerScreenState extends State<ServerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _setupMethodCallHandler();
+    _refreshCacheStatus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndPromptStoragePermission();
+    });
     _loadGameAccessState().then((_) {
       _scanCustomMissionsFromDisk().then((_) {
         _initAndStart();
       });
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshCacheStatus();
+    }
+  }
+
+  void _setupMethodCallHandler() {
+    _gameChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onCacheProgress') {
+        final args = Map<String, dynamic>.from(call.arguments as Map);
+        final status = args['status'] as String? ?? '';
+        final count = args['count'] as int? ?? 0;
+        final total = args['total'] as int? ?? 104;
+        final bytes = (args['bytes'] as num?)?.toInt() ?? 0;
+        final fileName = args['fileName'] as String?;
+        final error = args['error'] as String?;
+
+        if (mounted) {
+          setState(() {
+            _cacheFilesCopied = count;
+            _cacheTotalFiles = total;
+            if (status == 'starting') {
+              _isInstallingCache = true;
+              _cacheInstallProgress = 0.0;
+              _cacheInstallMessage =
+                  'Preparing installation to /Android/data/...';
+            } else if (status == 'copying') {
+              _isInstallingCache = true;
+              _cacheInstallProgress = total > 0
+                  ? (count / total).clamp(0.0, 1.0)
+                  : 0.0;
+              final mb = (bytes / (1024 * 1024)).toStringAsFixed(1);
+              final shortName = (fileName != null && fileName.length > 12)
+                  ? '${fileName.substring(0, 8)}...'
+                  : (fileName ?? '');
+              _cacheInstallMessage =
+                  'Installing file $count of $total: $shortName ($mb MB)';
+            } else if (status == 'completed') {
+              _isInstallingCache = false;
+              _cacheInstallProgress = 1.0;
+              final mb = (bytes / (1024 * 1024)).toStringAsFixed(1);
+              _cacheInstallMessage =
+                  'Cache installed successfully! ($count files, $mb MB)';
+              _refreshCacheStatus();
+            } else if (status == 'error') {
+              _isInstallingCache = false;
+              _cacheInstallMessage =
+                  'Error: ${error ?? "Unknown copy failure"}';
+              _refreshCacheStatus();
+            } else if (status == 'idle') {
+              _isInstallingCache = false;
+            }
+          });
+        }
+      }
+    });
+  }
+
+  Future<void> _refreshCacheStatus({bool forceScan = false}) async {
+    try {
+      final status = await _gameChannel.invokeMapMethod<String, dynamic>(
+        'getCacheStatus',
+        {'forceScan': forceScan},
+      );
+      if (mounted) {
+        setState(() {
+          _cacheStatus = status;
+        });
+      }
+    } catch (e) {
+      print('Error refreshing cache status: $e');
+    }
+  }
+
+  Future<void> _checkAndPromptStoragePermission() async {
+    try {
+      // If cache is already installed, skip storage permission prompt completely
+      if (_cacheStatus != null && (_cacheStatus!['installed'] as bool? ?? false)) {
+        return;
+      }
+      final status = await _gameChannel.invokeMapMethod<String, dynamic>(
+        'getCacheStatus',
+        {'forceScan': false},
+      );
+      if (status != null && (status['installed'] as bool? ?? false)) {
+        return;
+      }
+      final hasPermission =
+          await _gameChannel.invokeMethod<bool>(
+            'checkManageStoragePermission',
+          ) ??
+          false;
+      if (!hasPermission && mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF141C28),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFF00E5FF), width: 1.5),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.folder_shared, color: Color(0xFF00E5FF)),
+                SizedBox(width: 10),
+                Text(
+                  'Storage Permission',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: const Text(
+              'To scan your Downloads folder and install the 1.5 GB Game Data Cache, AC Identity Server needs All Files Access permission.\n\nPlease tap "Grant Access" and toggle the switch on the next screen.',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text(
+                  'Later',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _requestManageStoragePermission();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00E5FF),
+                  foregroundColor: Colors.black,
+                ),
+                child: const Text(
+                  'Grant Access',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      print('Permission check error: $e');
+    }
+  }
+
+  Future<void> _pickCacheZip() async {
+    final hasPerm =
+        await _gameChannel.invokeMethod<bool>('checkManageStoragePermission') ??
+        false;
+    if (!hasPerm) {
+      await _requestManageStoragePermission();
+      return;
+    }
+    try {
+      setState(() {
+        _isInstallingCache = true;
+        _cacheInstallMessage = 'Opening ZIP file picker...';
+      });
+      await _gameChannel.invokeMethod('pickCacheZip');
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInstallingCache = false;
+          _cacheInstallMessage = 'Error selecting ZIP: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _pickCacheFolder() async {
+    final hasPerm =
+        await _gameChannel.invokeMethod<bool>('checkManageStoragePermission') ??
+        false;
+    if (!hasPerm) {
+      await _requestManageStoragePermission();
+      return;
+    }
+    try {
+      setState(() {
+        _isInstallingCache = true;
+        _cacheInstallMessage = 'Opening folder picker...';
+      });
+      await _gameChannel.invokeMethod('pickCacheFolder');
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInstallingCache = false;
+          _cacheInstallMessage = 'Error selecting folder: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _installDetectedCache(String path, bool isZip) async {
+    final hasPerm =
+        await _gameChannel.invokeMethod<bool>('checkManageStoragePermission') ??
+        false;
+    if (!hasPerm) {
+      await _requestManageStoragePermission();
+      return;
+    }
+    try {
+      setState(() {
+        _isInstallingCache = true;
+        _cacheInstallMessage = 'Installing detected cache...';
+      });
+      await _gameChannel.invokeMethod('installCacheFromPath', {
+        'path': path,
+        'isZip': isZip,
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInstallingCache = false;
+          _cacheInstallMessage = 'Error installing detected cache: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _requestManageStoragePermission() async {
+    try {
+      await _gameChannel.invokeMethod('requestManageStoragePermission');
+      await Future.delayed(const Duration(seconds: 1));
+      await _refreshCacheStatus();
+    } catch (e) {
+      print('Permission error: $e');
+    }
   }
 
   Future<void> _scanCustomMissionsFromDisk() async {
@@ -893,8 +1171,30 @@ class _ServerScreenState extends State<ServerScreen> {
     Set<String> completedMissions,
     Set<String> unlockedCampaigns,
   ) {
+    int f4Tag = -1;
+    for (int k = 0; k < data.length; k++) {
+      if (data[k] == 0x22) {
+        f4Tag = k;
+        break;
+      }
+    }
+    if (f4Tag == -1) return data;
+    final f4Prefix = data.sublist(0, f4Tag + 1);
+    int k = f4Tag + 1;
+    int f4Len = 0;
+    int shift4 = 0;
+    while (k < data.length) {
+      final b = data[k++];
+      f4Len |= (b & 0x7F) << shift4;
+      if ((b & 0x80) == 0) break;
+      shift4 += 7;
+    }
+    final profileStart = k;
+    final profileEnd = k + f4Len;
+    if (profileEnd > data.length) return data;
+
     int tagPos = -1;
-    for (int idx = 0; idx < data.length - 1; idx++) {
+    for (int idx = profileStart; idx < profileEnd - 1; idx++) {
       if (data[idx] == 0x82 && data[idx + 1] == 0x02) {
         tagPos = idx;
         break;
@@ -911,9 +1211,13 @@ class _ServerScreenState extends State<ServerScreen> {
       if ((b & 0x80) == 0) break;
       shift += 7;
     }
-    if (i + f32Len > data.length) return data;
-    final f32Data = data.sublist(i, i + f32Len);
-    final suffix = data.sublist(i + f32Len);
+    final f32End = i + f32Len;
+    if (f32End > profileEnd) return data;
+
+    final f32Data = data.sublist(i, f32End);
+    final profileBeforeF32 = data.sublist(profileStart, tagPos);
+    final profileAfterF32 = data.sublist(f32End, profileEnd);
+    final postProfile = data.sublist(profileEnd);
 
     int j = 0;
     final keptEntries = <List<int>>[];
@@ -989,24 +1293,11 @@ class _ServerScreenState extends State<ServerScreen> {
       }
     }
     final newF32 = <int>[0x82, 0x02, ...f32LenVar, ...newF32Content];
-
-    int f4Tag = -1;
-    for (int k = 0; k < data.length; k++) {
-      if (data[k] == 0x22) {
-        f4Tag = k;
-        break;
-      }
-    }
-    if (f4Tag == -1) return data;
-    final f4Prefix = data.sublist(0, f4Tag + 1);
-    int k = f4Tag + 1;
-    while (k < data.length && (data[k] & 0x80) != 0) {
-      k++;
-    }
-    k++;
-
-    final profileBeforeF32 = data.sublist(k, tagPos);
-    final newProfile = <int>[...profileBeforeF32, ...newF32, ...suffix];
+    final newProfile = <int>[
+      ...profileBeforeF32,
+      ...newF32,
+      ...profileAfterF32,
+    ];
 
     final plVar = <int>[];
     int tmpPl = newProfile.length;
@@ -1021,25 +1312,67 @@ class _ServerScreenState extends State<ServerScreen> {
       }
     }
 
-    return Uint8List.fromList([...f4Prefix, ...plVar, ...newProfile]);
+    return Uint8List.fromList([
+      ...f4Prefix,
+      ...plVar,
+      ...newProfile,
+      ...postProfile,
+    ]);
   }
 
   Future<Uint8List?> _getActiveAuthResponse() async {
     final unlockedBytes =
         await _loadAsset('assets/responses/auth_unlocked.bin') ??
         await _loadAsset('assets/responses/auth.bin');
-    if (unlockedBytes == null) {
-      return await _loadAsset('assets/responses/auth_fresh.bin');
+    if (unlockedBytes != null) {
+      return _ensureDualAuth(unlockedBytes);
     }
-    if (_gameState.mode == 'unlocked' &&
-        _gameState.completedMissions.length >= kAllMissions.length) {
-      return unlockedBytes;
+    final freshBytes = await _loadAsset('assets/responses/auth_fresh.bin');
+    if (freshBytes != null) {
+      return _ensureDualAuth(freshBytes);
     }
-    return _filterAuthBytes(
-      unlockedBytes,
-      _gameState.completedMissions,
-      _gameState.unlockedCampaigns,
-    );
+    return null;
+  }
+
+  Uint8List _ensureDualAuth(Uint8List data) {
+    var out = data;
+    if (!_containsSequence(out, [0xA2, 0x06])) {
+      out = Uint8List.fromList([
+        ...out,
+        0xA2,
+        0x06,
+        0x0A,
+        0x0A,
+        0x08,
+        0x61,
+        0x73,
+        0x73,
+        0x61,
+        0x73,
+        0x73,
+        0x69,
+        0x6E,
+      ]);
+    }
+    if (!_containsSequence(out, [0xB2, 0x06])) {
+      out = Uint8List.fromList([
+        ...out,
+        0xB2,
+        0x06,
+        0x0A,
+        0x0A,
+        0x08,
+        0x61,
+        0x73,
+        0x73,
+        0x61,
+        0x73,
+        0x73,
+        0x69,
+        0x6E,
+      ]);
+    }
+    return out;
   }
 
   Future<void> _initAndStart() async {
@@ -1326,7 +1659,8 @@ class _ServerScreenState extends State<ServerScreen> {
           _containsSequence(bodyBytes, [0xA2, 0x06]) ||
           bodyStr.contains('assassin') ||
           bodyStr.contains('auth')) {
-        reqType = 'AuthAccount';
+        final isRegister = _containsSequence(bodyBytes, [0xA2, 0x06]);
+        reqType = isRegister ? 'RegisterUser' : 'AuthAccount';
         directBytes = await _getActiveAuthResponse();
       } else if (_containsSequence(bodyBytes, [0xB2, 0x09])) {
         reqType = 'Discovery';
@@ -1410,7 +1744,7 @@ class _ServerScreenState extends State<ServerScreen> {
     final zipped = entry['zipped'] as bool? ?? false;
 
     File? foundFile;
-    for (final dir in _candidateCacheDirs) {
+    for (final dir in _allCandidateCacheDirs) {
       final f = File('$dir/$fileId');
       if (await f.exists()) {
         foundFile = f;
@@ -1504,6 +1838,420 @@ class _ServerScreenState extends State<ServerScreen> {
         );
       }
     }
+  }
+
+  Widget _buildCacheInstallerCard() {
+    final status = _cacheStatus;
+    final fileCount = (status?['fileCount'] as num?)?.toInt() ?? 0;
+    final isInstalled = status?['installed'] as bool? ?? false;
+    final hasManageStorage = status?['hasManageStorage'] as bool? ?? true;
+    final autoDetected = status?['autoDetected'] as Map?;
+    final targetPath =
+        status?['targetPath'] as String? ??
+        '/Android/data/com.ubisoft.assassinscreed.identity/files/cache';
+
+    Color cardBorder;
+    Color accentColor;
+    IconData statusIcon;
+    String statusTitle;
+    String statusSubtitle;
+
+    if (_isInstallingCache) {
+      cardBorder = const Color(0xFF00E5FF);
+      accentColor = const Color(0xFF00E5FF);
+      statusIcon = Icons.sync;
+      statusTitle = 'INSTALLING GAME DATA CACHE...';
+      statusSubtitle = _cacheInstallMessage;
+    } else if (isInstalled) {
+      cardBorder = const Color(0xFF00E676);
+      accentColor = const Color(0xFF00E676);
+      statusIcon = Icons.check_circle;
+      statusTitle = 'GAME CACHE: READY ($fileCount/104 FILES)';
+      statusSubtitle =
+          'All asset bundles installed. 100% offline gameplay ready.';
+    } else if (fileCount > 0) {
+      cardBorder = const Color(0xFFFFB300);
+      accentColor = const Color(0xFFFFB300);
+      statusIcon = Icons.warning_amber_rounded;
+      statusTitle = 'GAME CACHE: INCOMPLETE ($fileCount/104 FILES)';
+      statusSubtitle =
+          'Some asset files are missing. Select ZIP or folder to complete.';
+    } else {
+      cardBorder = const Color(0xFFFF5252);
+      accentColor = const Color(0xFFFF5252);
+      statusIcon = Icons.folder_zip_rounded;
+      statusTitle = 'GAME CACHE: NOT INSTALLED (0/104 FILES)';
+      statusSubtitle =
+          'Select GameData_Cache ZIP or folder to copy data to game folder.';
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141C28),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: cardBorder.withValues(alpha: 0.6),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            children: [
+              Icon(statusIcon, color: accentColor, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      statusTitle,
+                      style: TextStyle(
+                        color: accentColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      statusSubtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh,
+                  color: Colors.white54,
+                  size: 18,
+                ),
+                tooltip: 'Refresh Cache Status',
+                onPressed: () => _refreshCacheStatus(forceScan: true),
+              ),
+            ],
+          ),
+
+          // Progress indicator during install
+          if (_isInstallingCache) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: _cacheInstallProgress > 0 ? _cacheInstallProgress : null,
+                minHeight: 6,
+                backgroundColor: const Color(0xFF101722),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF00E5FF),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Target: $targetPath',
+              style: const TextStyle(fontSize: 10, color: Colors.white38),
+            ),
+          ],
+
+          // Installer buttons & scan banners only when cache is NOT installed
+          if (!_isInstallingCache && !isInstalled) ...[
+            const SizedBox(height: 10),
+            // Auto-detected cache banner (if found on storage)
+            if (autoDetected != null) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D251C),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: const Color(0xFF00E676).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.auto_awesome,
+                      color: Color(0xFF00E676),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Found: ${autoDetected['isZip'] == true ? 'Cache ZIP' : 'Cache Folder'}',
+                            style: const TextStyle(
+                              color: Color(0xFF00E676),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                          Text(
+                            autoDetected['path'] as String? ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => _installDetectedCache(
+                        autoDetected['path'] as String,
+                        autoDetected['isZip'] as bool? ?? false,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00E676),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        '1-Tap Install',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Selection Buttons (Select ZIP or Select Folder)
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _pickCacheZip,
+                    icon: const Icon(Icons.folder_zip, size: 16),
+                    label: const Text(
+                      'Select ZIP',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E2D42),
+                      foregroundColor: const Color(0xFF00E5FF),
+                      side: const BorderSide(
+                        color: Color(0xFF00E5FF),
+                        width: 1,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _pickCacheFolder,
+                    icon: const Icon(Icons.folder_open, size: 16),
+                    label: const Text(
+                      'Select Folder',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E2D42),
+                      foregroundColor: const Color(0xFFFFB300),
+                      side: const BorderSide(
+                        color: Color(0xFFFFB300),
+                        width: 1,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Permission alert if manage storage is missing on Android 11+
+            if (!hasManageStorage) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: _requestManageStoragePermission,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2E1C0A),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: const Color(0xFFFF9100).withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.lock_open, color: Color(0xFFFF9100), size: 14),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Tap to grant All Files Access to write to Android/data',
+                          style: TextStyle(
+                            color: Color(0xFFFF9100),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ] else if (!_isInstallingCache && isInstalled) ...[
+            // When already installed, show a discreet reinstall option if ever needed
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: _showReinstallCacheDialog,
+                  icon: const Icon(
+                    Icons.settings_backup_restore,
+                    size: 13,
+                    color: Colors.white38,
+                  ),
+                  label: const Text(
+                    'Reinstall Cache...',
+                    style: TextStyle(fontSize: 10, color: Colors.white38),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showReinstallCacheDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141C28),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Game Cache Options',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Game Cache is currently installed (104 files). You can reinstall or overwrite using a ZIP file or folder.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _pickCacheZip();
+                    },
+                    icon: const Icon(Icons.folder_zip, size: 16),
+                    label: const Text('Select ZIP'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E2D42),
+                      foregroundColor: const Color(0xFF00E5FF),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _pickCacheFolder();
+                    },
+                    icon: const Icon(Icons.folder_open, size: 16),
+                    label: const Text('Select Folder'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E2D42),
+                      foregroundColor: const Color(0xFFFFB300),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _refreshCacheStatus(forceScan: true);
+                },
+                icon: const Icon(Icons.search, size: 16, color: Color(0xFF00E676)),
+                label: const Text(
+                  'Scan Storage for Cache Source',
+                  style: TextStyle(color: Color(0xFF00E676), fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _openGameAccessManager() {
@@ -1727,6 +2475,9 @@ class _ServerScreenState extends State<ServerScreen> {
               ],
             ),
           ),
+
+          // Game Data Cache Installer Card
+          _buildCacheInstallerCard(),
 
           // Live Activity Log Header
           Padding(
@@ -2268,8 +3019,9 @@ class _GameAccessScreenState extends State<GameAccessScreen>
       String mid = _uploadIdController.text.trim();
       if (mid.isEmpty) {
         mid = name.replaceAll('.json', '').replaceAll('.bin', '');
-        if (mid.startsWith('openMission_'))
+        if (mid.startsWith('openMission_')) {
           mid = mid.substring('openMission_'.length);
+        }
       }
       String title = _uploadTitleController.text.trim();
       if (title.isEmpty) {

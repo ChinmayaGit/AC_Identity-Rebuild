@@ -13,25 +13,38 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.OpenableColumns
+import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.util.zip.ZipInputStream
+import kotlin.concurrent.thread
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.acid.server/game"
     private val REQUEST_PICK_FILE = 9001
     private val REQUEST_STORAGE_PERMISSION = 9002
+    private val REQUEST_PICK_CACHE_ZIP = 9003
+    private val REQUEST_PICK_CACHE_FOLDER = 9004
     private var pendingFileResult: MethodChannel.Result? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var methodChannel: MethodChannel? = null
 
     private val gameFilesDir = File(Environment.getExternalStorageDirectory(), "Android/data/com.ubisoft.assassinscreed.identity/files")
+    private val gameCacheDir = File(Environment.getExternalStorageDirectory(), "Android/data/com.ubisoft.assassinscreed.identity/files/cache")
     private val ownFilesDir by lazy { getExternalFilesDir(null) ?: filesDir }
+    private val ownCacheDir by lazy { File(ownFilesDir, "cache") }
     private val sharedDir = File(Environment.getExternalStorageDirectory(), "ACIdentity")
+    private val sharedCacheDir = File(Environment.getExternalStorageDirectory(), "ACIdentity_Cache")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +88,23 @@ class MainActivity : FlutterActivity() {
             } else {
                 pending?.success(null)
             }
+        } else if (requestCode == REQUEST_PICK_CACHE_ZIP) {
+            if (resultCode == Activity.RESULT_OK && data?.data != null) {
+                installCacheFromZipUri(data.data!!)
+            } else {
+                sendCacheProgress("idle", 0, 104, 0, null, null)
+            }
+        } else if (requestCode == REQUEST_PICK_CACHE_FOLDER) {
+            if (resultCode == Activity.RESULT_OK && data?.data != null) {
+                val uri = data.data!!
+                try {
+                    val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    contentResolver.takePersistableUriPermission(uri, flags)
+                } catch (_: Exception) {}
+                installCacheFromFolderUri(uri)
+            } else {
+                sendCacheProgress("idle", 0, 104, 0, null, null)
+            }
         }
     }
 
@@ -89,7 +119,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        methodChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startForegroundService" -> {
                     try {
@@ -456,6 +487,136 @@ class MainActivity : FlutterActivity() {
                         result.error("SHARE_ERROR", e.message, null)
                     }
                 }
+                "getCacheStatus" -> {
+                    try {
+                        val forceScan = call.argument<Boolean>("forceScan") ?: false
+                        val ownFiles = if (ownCacheDir.exists()) ownCacheDir.listFiles()?.filter { !it.name.startsWith(".") && it.isFile && it.length() > 0 } ?: emptyList() else emptyList()
+                        val gameFiles = if (gameCacheDir.exists()) gameCacheDir.listFiles()?.filter { !it.name.startsWith(".") && it.isFile && it.length() > 0 } ?: emptyList() else emptyList()
+                        val sharedFiles = if (sharedCacheDir.exists()) sharedCacheDir.listFiles()?.filter { !it.name.startsWith(".") && it.isFile && it.length() > 0 } ?: emptyList() else emptyList()
+
+                        val effectiveCount = maxOf(ownFiles.size, gameFiles.size, sharedFiles.size)
+                        val effectiveBytes = maxOf(ownFiles.sumOf { it.length() }, gameFiles.sumOf { it.length() }, sharedFiles.sumOf { it.length() })
+                        val installed = effectiveCount >= 100
+
+                        var canWrite = false
+                        try {
+                            if (!gameCacheDir.exists()) {
+                                gameFilesDir.mkdirs()
+                                gameCacheDir.mkdirs()
+                            }
+                            val probe = File(gameCacheDir, ".probe_${System.currentTimeMillis()}")
+                            probe.writeText("ok")
+                            canWrite = probe.exists()
+                            probe.delete()
+                        } catch (_: Exception) {}
+
+                        // If already installed, skip expensive storage scans unless explicitly requested
+                        val autoDetected = if (installed && !forceScan) null else findAutoDetectedCacheSource()
+                        val hasManageStorage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            Environment.isExternalStorageManager()
+                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                        } else {
+                            true
+                        }
+
+                        result.success(mapOf(
+                            "installed" to installed,
+                            "fileCount" to effectiveCount,
+                            "gameFileCount" to gameFiles.size,
+                            "ownFileCount" to ownFiles.size,
+                            "totalBytes" to effectiveBytes,
+                            "targetPath" to gameCacheDir.absolutePath,
+                            "ownCachePath" to ownCacheDir.absolutePath,
+                            "canWrite" to canWrite,
+                            "autoDetected" to autoDetected,
+                            "hasManageStorage" to hasManageStorage
+                        ))
+                    } catch (e: Exception) {
+                        result.error("CACHE_STATUS_ERROR", e.message, null)
+                    }
+                }
+                "checkManageStoragePermission" -> {
+                    val has = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        Environment.isExternalStorageManager()
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    } else {
+                        true
+                    }
+                    result.success(has)
+                }
+                "requestManageStoragePermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (_: Exception) {
+                            try {
+                                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                startActivity(intent)
+                                result.success(true)
+                            } catch (e2: Exception) {
+                                result.error("PERMISSION_ERROR", e2.message, null)
+                            }
+                        }
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                        if (!granted) {
+                            pendingPermissionResult = result
+                            ActivityCompat.requestPermissions(
+                                this,
+                                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE),
+                                REQUEST_STORAGE_PERMISSION
+                            )
+                        } else {
+                            result.success(true)
+                        }
+                    } else {
+                        result.success(true)
+                    }
+                }
+                "pickCacheZip" -> {
+                    try {
+                        val pickIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/x-zip", "application/octet-stream", "*/*"))
+                        }
+                        startActivityForResult(Intent.createChooser(pickIntent, "Select GameData_Cache ZIP"), REQUEST_PICK_CACHE_ZIP)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("PICK_ZIP_ERROR", e.message, null)
+                    }
+                }
+                "pickCacheFolder" -> {
+                    try {
+                        val pickIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                        }
+                        startActivityForResult(Intent.createChooser(pickIntent, "Select GameData_Cache Folder"), REQUEST_PICK_CACHE_FOLDER)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("PICK_FOLDER_ERROR", e.message, null)
+                    }
+                }
+                "installCacheFromPath" -> {
+                    try {
+                        val path = call.argument<String>("path")
+                        val isZip = call.argument<Boolean>("isZip") ?: false
+                        if (path != null) {
+                            installCacheFromLocalPath(path, isZip)
+                            result.success(true)
+                        } else {
+                            result.error("ARG_ERROR", "Path cannot be null", null)
+                        }
+                    } catch (e: Exception) {
+                        result.error("INSTALL_ERROR", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -726,6 +887,360 @@ class MainActivity : FlutterActivity() {
             }
         } finally {
             pdfDocument.close()
+        }
+    }
+
+    private fun sendCacheProgress(status: String, count: Int, total: Int, bytes: Long, fileName: String?, error: String?) {
+        runOnUiThread {
+            val data = HashMap<String, Any?>().apply {
+                put("status", status)
+                put("count", count)
+                put("total", total)
+                put("bytes", bytes)
+                put("fileName", fileName)
+                put("error", error)
+            }
+            methodChannel?.invokeMethod("onCacheProgress", data)
+        }
+    }
+
+    private fun findAutoDetectedCacheSource(): Map<String, Any>? {
+        val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val sdcard = Environment.getExternalStorageDirectory()
+
+        val searchRoots = listOfNotNull(
+            downloadDir,
+            File(sdcard, "Download"),
+            File(sdcard, "Downloads"),
+            sdcard,
+            File(sdcard, "ACIdentity")
+        )
+
+        for (root in searchRoots) {
+            try {
+                if (!root.exists() || !root.isDirectory) continue
+
+                // Check directories up to 2 levels deep
+                val candidateDirs = mutableListOf<File>()
+                candidateDirs.add(root)
+                root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { sub ->
+                    candidateDirs.add(sub)
+                    sub.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { sub2 ->
+                        candidateDirs.add(sub2)
+                    }
+                }
+
+                for (dir in candidateDirs) {
+                    val files = dir.listFiles()?.filter { it.isFile && !it.name.startsWith(".") && it.length() > 500 } ?: emptyList()
+                    if (files.size >= 10) {
+                        val hasGuid = files.any { it.name.contains("-") && it.name.length >= 30 }
+                        val isCacheNamed = dir.name.contains("cache", ignoreCase = true) || dir.name.contains("data", ignoreCase = true) || dir.name.contains("identity", ignoreCase = true)
+                        if (hasGuid || isCacheNamed) {
+                            return mapOf(
+                                "path" to dir.absolutePath,
+                                "isZip" to false,
+                                "count" to files.size,
+                                "size" to files.sumOf { it.length() },
+                                "name" to dir.name
+                            )
+                        }
+                    }
+                }
+
+                // Check zip files in root and subdirectories
+                val zips = mutableListOf<File>()
+                root.listFiles()?.filter { it.isFile && it.name.endsWith(".zip", ignoreCase = true) && it.length() > 20 * 1024 * 1024 }?.forEach { zips.add(it) }
+                root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { sub ->
+                    sub.listFiles()?.filter { it.isFile && it.name.endsWith(".zip", ignoreCase = true) && it.length() > 20 * 1024 * 1024 }?.forEach { zips.add(it) }
+                }
+
+                val bestZip = zips.find { it.name.contains("cache", ignoreCase = true) || it.name.contains("identity", ignoreCase = true) } ?: zips.firstOrNull()
+                if (bestZip != null) {
+                    return mapOf(
+                        "path" to bestZip.absolutePath,
+                        "isZip" to true,
+                        "count" to 104,
+                        "size" to bestZip.length(),
+                        "name" to bestZip.name
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    private fun installCacheFromZipUri(uri: Uri) {
+        thread(name = "CacheZipInstaller") {
+            var count = 0
+            var totalBytes = 0L
+            val estimatedTotal = 104
+            try {
+                sendCacheProgress("starting", 0, estimatedTotal, 0, null, null)
+                if (!ownCacheDir.exists()) ownCacheDir.mkdirs()
+                var directGameWriteOk = true
+                try {
+                    if (!gameCacheDir.exists()) {
+                        gameFilesDir.mkdirs()
+                        gameCacheDir.mkdirs()
+                    }
+                } catch (_: Exception) {
+                    directGameWriteOk = false
+                }
+
+                contentResolver.openInputStream(uri)?.use { inStream ->
+                    val zis = java.util.zip.ZipInputStream(java.io.BufferedInputStream(inStream))
+                    var entry = zis.nextEntry
+                    val buffer = ByteArray(128 * 1024)
+
+                    while (entry != null) {
+                        if (!entry.isDirectory) {
+                            val rawName = entry.name
+                            val fileName = rawName.substringAfterLast('/').substringAfterLast('\\')
+                            if (fileName.isNotEmpty() && !fileName.startsWith(".") && !rawName.contains("__MACOSX")) {
+                                // 1. Always extract into ownCacheDir (GUARANTEED)
+                                val ownOutFile = File(ownCacheDir, fileName)
+                                java.io.FileOutputStream(ownOutFile).use { fos ->
+                                    var len = zis.read(buffer)
+                                    while (len > 0) {
+                                        fos.write(buffer, 0, len)
+                                        totalBytes += len
+                                        len = zis.read(buffer)
+                                    }
+                                }
+
+                                // 2. Also try direct copy into gameCacheDir
+                                if (directGameWriteOk) {
+                                    try {
+                                        val gameOutFile = File(gameCacheDir, fileName)
+                                        java.io.FileInputStream(ownOutFile).use { fis ->
+                                            java.io.FileOutputStream(gameOutFile).use { fos ->
+                                                val copyBuf = ByteArray(64 * 1024)
+                                                var cLen = fis.read(copyBuf)
+                                                while (cLen > 0) {
+                                                    fos.write(copyBuf, 0, cLen)
+                                                    cLen = fis.read(copyBuf)
+                                                }
+                                            }
+                                        }
+                                    } catch (_: Exception) {
+                                        directGameWriteOk = false
+                                    }
+                                }
+
+                                count++
+                                sendCacheProgress("copying", count, estimatedTotal, totalBytes, fileName, null)
+                            }
+                        }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                }
+                sendCacheProgress("completed", count, count, totalBytes, null, null)
+            } catch (e: Exception) {
+                sendCacheProgress("error", count, estimatedTotal, totalBytes, null, e.message ?: "Extraction failed")
+            }
+        }
+    }
+
+    private fun installCacheFromFolderUri(treeUri: Uri) {
+        thread(name = "CacheFolderInstaller") {
+            var count = 0
+            var totalBytes = 0L
+            try {
+                sendCacheProgress("starting", 0, 104, 0, null, null)
+                if (!ownCacheDir.exists()) ownCacheDir.mkdirs()
+                var directGameWriteOk = true
+                try {
+                    if (!gameCacheDir.exists()) {
+                        gameFilesDir.mkdirs()
+                        gameCacheDir.mkdirs()
+                    }
+                } catch (_: Exception) {
+                    directGameWriteOk = false
+                }
+
+                val docTree = androidx.documentfile.provider.DocumentFile.fromTreeUri(this, treeUri)
+                val targetDocDir = docTree?.findFile("GameData_Cache")
+                    ?: docTree?.findFile("cache")
+                    ?: docTree
+
+                val docFiles: List<androidx.documentfile.provider.DocumentFile> = targetDocDir?.listFiles()?.filter { it.isFile && !it.name.orEmpty().startsWith(".") } ?: emptyList()
+                val total = if (docFiles.isNotEmpty()) docFiles.size else 104
+                val buffer = ByteArray(128 * 1024)
+
+                for (docFile in docFiles) {
+                    val fileName = docFile.name ?: continue
+                    val ownOutFile = File(ownCacheDir, fileName)
+                    contentResolver.openInputStream(docFile.uri)?.use { inStream ->
+                        java.io.FileOutputStream(ownOutFile).use { fos ->
+                            var len = inStream.read(buffer)
+                            while (len > 0) {
+                                fos.write(buffer, 0, len)
+                                totalBytes += len
+                                len = inStream.read(buffer)
+                            }
+                        }
+                    }
+
+                    if (directGameWriteOk) {
+                        try {
+                            val gameOutFile = File(gameCacheDir, fileName)
+                            java.io.FileInputStream(ownOutFile).use { fis ->
+                                java.io.FileOutputStream(gameOutFile).use { fos ->
+                                    val copyBuf = ByteArray(64 * 1024)
+                                    var cLen = fis.read(copyBuf)
+                                    while (cLen > 0) {
+                                        fos.write(copyBuf, 0, cLen)
+                                        cLen = fis.read(copyBuf)
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {
+                            directGameWriteOk = false
+                        }
+                    }
+
+                    count++
+                    sendCacheProgress("copying", count, total, totalBytes, fileName, null)
+                }
+                sendCacheProgress("completed", count, count, totalBytes, null, null)
+            } catch (e: Exception) {
+                sendCacheProgress("error", count, 104, totalBytes, null, e.message ?: "Folder copy failed")
+            }
+        }
+    }
+
+    private fun installCacheFromLocalPath(path: String, isZip: Boolean) {
+        thread(name = "CacheLocalInstaller") {
+            var count = 0
+            var totalBytes = 0L
+            val estimatedTotal = 104
+            try {
+                sendCacheProgress("starting", 0, estimatedTotal, 0, null, null)
+                if (!ownCacheDir.exists()) ownCacheDir.mkdirs()
+                var directGameWriteOk = true
+                try {
+                    if (!gameCacheDir.exists()) {
+                        gameFilesDir.mkdirs()
+                        gameCacheDir.mkdirs()
+                    }
+                } catch (_: Exception) {
+                    directGameWriteOk = false
+                }
+
+                val srcFile = File(path)
+                val buffer = ByteArray(128 * 1024)
+                if (isZip) {
+                    java.io.FileInputStream(srcFile).use { inStream ->
+                        val zis = java.util.zip.ZipInputStream(java.io.BufferedInputStream(inStream))
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            if (!entry.isDirectory) {
+                                val rawName = entry.name
+                                val fileName = rawName.substringAfterLast('/').substringAfterLast('\\')
+                                if (fileName.isNotEmpty() && !fileName.startsWith(".") && !rawName.contains("__MACOSX")) {
+                                    val ownOutFile = File(ownCacheDir, fileName)
+                                    java.io.FileOutputStream(ownOutFile).use { fos ->
+                                        var len = zis.read(buffer)
+                                        while (len > 0) {
+                                            fos.write(buffer, 0, len)
+                                            totalBytes += len
+                                            len = zis.read(buffer)
+                                        }
+                                    }
+
+                                    if (directGameWriteOk) {
+                                        try {
+                                            val gameOutFile = File(gameCacheDir, fileName)
+                                            java.io.FileInputStream(ownOutFile).use { fis ->
+                                                java.io.FileOutputStream(gameOutFile).use { fos ->
+                                                    val copyBuf = ByteArray(64 * 1024)
+                                                    var cLen = fis.read(copyBuf)
+                                                    while (cLen > 0) {
+                                                        fos.write(copyBuf, 0, cLen)
+                                                        cLen = fis.read(copyBuf)
+                                                    }
+                                                }
+                                            }
+                                        } catch (_: Exception) {
+                                            directGameWriteOk = false
+                                        }
+                                    }
+
+                                    count++
+                                    sendCacheProgress("copying", count, estimatedTotal, totalBytes, fileName, null)
+                                }
+                            }
+                            zis.closeEntry()
+                            entry = zis.nextEntry
+                        }
+                    }
+                } else {
+                    val targetDir = if (File(srcFile, "GameData_Cache").isDirectory) File(srcFile, "GameData_Cache")
+                                    else if (File(srcFile, "cache").isDirectory) File(srcFile, "cache")
+                                    else srcFile
+                    val files: List<File> = targetDir.listFiles()?.filter { it.isFile && !it.name.startsWith(".") } ?: emptyList()
+                    val total = if (files.isNotEmpty()) files.size else 104
+                    for (f in files) {
+                        val ownOutFile = File(ownCacheDir, f.name)
+                        java.io.FileInputStream(f).use { fis ->
+                            java.io.FileOutputStream(ownOutFile).use { fos ->
+                                var len = fis.read(buffer)
+                                while (len > 0) {
+                                    fos.write(buffer, 0, len)
+                                    totalBytes += len
+                                    len = fis.read(buffer)
+                                }
+                            }
+                        }
+
+                        if (directGameWriteOk) {
+                            try {
+                                val gameOutFile = File(gameCacheDir, f.name)
+                                java.io.FileInputStream(ownOutFile).use { fis ->
+                                    java.io.FileOutputStream(gameOutFile).use { fos ->
+                                        val copyBuf = ByteArray(64 * 1024)
+                                        var cLen = fis.read(copyBuf)
+                                        while (cLen > 0) {
+                                            fos.write(copyBuf, 0, cLen)
+                                            cLen = fis.read(copyBuf)
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) {
+                                directGameWriteOk = false
+                            }
+                        }
+
+                        count++
+                        sendCacheProgress("copying", count, total, totalBytes, f.name, null)
+                    }
+                }
+                sendCacheProgress("completed", count, count, totalBytes, null, null)
+            } catch (e: Exception) {
+                val rootOk = tryRootFallback(path, isZip)
+                if (rootOk) {
+                    val currentCount = gameCacheDir.listFiles()?.filter { !it.name.startsWith(".") && it.isFile }?.size ?: 104
+                    sendCacheProgress("completed", currentCount, currentCount, totalBytes, null, null)
+                } else {
+                    sendCacheProgress("error", count, estimatedTotal, totalBytes, null, e.message ?: "Local copy failed")
+                }
+            }
+        }
+    }
+
+    private fun tryRootFallback(sourcePath: String, isZip: Boolean): Boolean {
+        return try {
+            val targetPath = "/sdcard/Android/data/com.ubisoft.assassinscreed.identity/files/cache"
+            val cmd = if (isZip) {
+                "mkdir -p $targetPath && unzip -o -j \"$sourcePath\" -d $targetPath && chmod -R 777 $targetPath"
+            } else {
+                "mkdir -p $targetPath && cp -rf \"$sourcePath\"/* $targetPath/ && chmod -R 777 $targetPath"
+            }
+            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            p.waitFor() == 0
+        } catch (_: Exception) {
+            false
         }
     }
 }
