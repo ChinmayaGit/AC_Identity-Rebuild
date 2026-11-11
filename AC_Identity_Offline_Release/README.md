@@ -1,5 +1,10 @@
 # Assassin's Creed Identity - 100% Offline Standalone Release
 
+<p align="center">
+  <img src="Pics/1.jpg" width="49%" alt="Assassin's Creed Identity - In-Game Combat" />
+  <img src="Pics/2.jpg" width="49%" alt="Assassin's Creed Identity - In-Game Exploration" />
+</p>
+
 Play the complete **Assassin's Creed Identity** (v2.8.2) anywhere, 100% locally on your Android device — **no PC, Mac, external server, or Wi-Fi required!**
 
 ---

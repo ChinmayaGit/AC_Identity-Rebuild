@@ -1,5 +1,10 @@
 # Assassin's Creed Identity — Offline Rebuild & Server Emulation
 
+<p align="center">
+  <img src="Pics/1.jpg" width="49%" alt="Assassin's Creed Identity - In-Game Combat" />
+  <img src="Pics/2.jpg" width="49%" alt="Assassin's Creed Identity - In-Game Exploration" />
+</p>
+
 A comprehensive preservation and offline emulation project for **Assassin's Creed Identity (v2.8.2)** on Android. This project reverse-engineers the game's network architecture, emulates the decommissioned Ubisoft backend services, patches online DRM/discovery checks, and provides an on-device Companion Server with full level management and custom mission creation capabilities.
 
 ---
