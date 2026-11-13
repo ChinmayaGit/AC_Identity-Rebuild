@@ -1,11 +1,53 @@
 # Assassin's Creed Identity - 100% Offline Standalone Release
 
+Play the complete **Assassin's Creed Identity** (v2.8.2) anywhere, 100% locally on your Android device — **no PC, Mac, external server, or Wi-Fi required!**
+
+---
+
+## 📸 Visual Showcase & Screenshots
+
+### 🎮 Game App Gameplay
+| Real-Time Combat | Street Stealth & Exploration |
+| :---: | :---: |
+| <img src="Pics/gameplay_combat.jpg" width="100%" alt="In-Game Real-Time Combat" /> | <img src="Pics/gameplay_exploration.jpg" width="100%" alt="Street Stealth and Crowds" /> |
+| *Active sword combat vs Borgia guards* | *Crowd blending & hay cart hiding spots* |
+
 <p align="center">
-  <img src="Pics/1.jpg" width="49%" alt="Assassin's Creed Identity - In-Game Combat" />
-  <img src="Pics/2.jpg" width="49%" alt="Assassin's Creed Identity - In-Game Exploration" />
+  <img src="Pics/gameplay_leap_of_faith.jpg" width="85%" alt="Rooftop Leap of Faith & Air Assassination" /><br />
+  <em>Iconic Rooftop Leap of Faith & High-Vantage Stealth Air Assassination</em>
 </p>
 
-Play the complete **Assassin's Creed Identity** (v2.8.2) anywhere, 100% locally on your Android device — **no PC, Mac, external server, or Wi-Fi required!**
+### 🗺️ Game App Menus & Progression
+| Title & Offline Handshake | 3D Animus Campaign Globe |
+| :---: | :---: |
+| <img src="Pics/menu_title_splash.jpg" width="100%" alt="Title Screen" /> | <img src="Pics/menu_campaign_globe.jpg" width="100%" alt="3D Campaign Globe" /> |
+| *Seamless offline localhost handshake* | *Interactive 3D campaign chapter selector* |
+
+| Mission Synchronization & Select | Assassin Customization & Gear |
+| :---: | :---: |
+| <img src="Pics/menu_mission_select.jpg" width="100%" alt="Mission Select" /> | <img src="Pics/menu_assassin_character.jpg" width="100%" alt="Assassin Customization" /> |
+| *Authentic memory objectives & challenges* | *Equipment, inventory, forge & skill tree* |
+
+<p align="center">
+  <img src="Pics/menu_codex_database.jpg" width="85%" alt="Animus Codex & Machiavelli's Journal" /><br />
+  <em>Animus Codex Database & Machiavelli's Historical Journal</em>
+</p>
+
+### ⚙️ Companion Server Settings & Management
+| Server Dashboard & Cache (104/104) | Real-Time Protocol Buffers Stream |
+| :---: | :---: |
+| <img src="Pics/server_dashboard.jpg" width="100%" alt="Server Dashboard" /> | <img src="Pics/server_activity_logs.jpg" width="100%" alt="Network Activity Logs" /> |
+| *100% verified local CDN cache & instant toggle* | *Live network packet & opcode monitor* |
+
+| Campaign Level & Mission Unlocker | Custom Mission Uploader |
+| :---: | :---: |
+| <img src="Pics/server_mission_unlocks.jpg" width="100%" alt="Mission Unlocks" /> | <img src="Pics/server_custom_mission_upload.jpg" width="100%" alt="Custom Mission Upload" /> |
+| *1-Tap Unlock All or selective mission toggle* | *Inject custom JSON / BIN mission definitions* |
+
+| AI Mission Creator Guide | AI Skill & Assets Package Export |
+| :---: | :---: |
+| <img src="Pics/server_ai_creator_guide.jpg" width="100%" alt="AI Creator Guide" /> | <img src="Pics/server_export_package.jpg" width="100%" alt="AI Package Export" /> |
+| *Built-in prompt templates & asset guide* | *One-click AI Skill package exporter* |
 
 ---
 
